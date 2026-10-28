@@ -290,9 +290,10 @@ object NebulaSimulationEngine {
                     if (state.ticks - faction.lastExpansionTick >= AI_CONQUEST_COOLDOWN_TICKS) {
                         annexAISystem(state, faction, targetSys, fleet)
                     }
-                } else if (defenderFleets.isNotEmpty() && faction != null &&
-                    isAtWar(state, fleet.owner, defenderFleets.first().owner)
+                } else if (defenderFleets.isNotEmpty() &&
+                    (faction == null || isAtWar(state, fleet.owner, defenderFleets.first().owner))
                 ) {
+                    // Neutral raiders such as pirates remain hostile even without diplomacy records.
                     resolveFleetClash(state, fleet, defenderFleets.first())
                 }
             }

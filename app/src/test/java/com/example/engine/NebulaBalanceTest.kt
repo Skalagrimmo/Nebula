@@ -290,6 +290,61 @@ class NebulaBalanceTest {
     }
 
     @Test
+    fun `pirate fleets can still fight rival fleets outside formal diplomacy`() {
+        val state = GameState(
+            ticks = 1,
+            playerFactionId = "solarian",
+            factions = mutableMapOf(
+                "solarian" to Faction(
+                    id = "solarian",
+                    name = "Solarian Empire",
+                    displayName = "Solarian Empire",
+                    systems = mutableListOf("A")
+                )
+            ),
+            systems = mutableMapOf(
+                "A" to StarSystem(
+                    id = "A",
+                    owner = "solarian",
+                    neighbors = mutableListOf("B")
+                ),
+                "B" to StarSystem(
+                    id = "B",
+                    owner = null,
+                    neighbors = mutableListOf("A")
+                )
+            ),
+            fleets = mutableListOf(
+                Fleet(
+                    id = "pirate-raider",
+                    owner = "pirates",
+                    location = "A",
+                    strength = 15f,
+                    type = FleetType.PIRATE,
+                    role = "attack"
+                ),
+                Fleet(
+                    id = "solar-defender",
+                    owner = "solarian",
+                    location = "B",
+                    strength = 25f,
+                    type = FleetType.FIGHTER,
+                    role = "defense"
+                )
+            )
+        )
+
+        repeat(200) {
+            if (state.events.any { event -> event.titleKey == "Space Battle" }) return@repeat
+            NebulaSimulationEngine.processFleetMovement(state)
+        }
+
+        assertTrue("pirates should still be able to initiate a clash without a war record",
+            state.events.any { it.titleKey == "Space Battle" })
+        assertTrue("pirates must never annex systems", state.systems.values.none { it.owner == "pirates" })
+    }
+
+    @Test
     fun `pirate fleets cannot annex systems during repeated movement`() {
         val state = GameState(
             factions = mutableMapOf(
