@@ -1,7 +1,7 @@
 # 🌌 Nebula 4X
 
 **Nebula 4X** — мобільна космічна 4X-стратегія з RPG-режимом, оптимізована для слабких пристроїв.
-A galactic 4X space strategy & RPG game for Android, optimized for low-end devices.
+
 
 ## 🎮 Можливості
 
