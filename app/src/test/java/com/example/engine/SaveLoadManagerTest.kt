@@ -179,8 +179,9 @@ class SaveLoadManagerTest {
         val factions = root.getJSONObject("factions")
         val factionKeys = factions.keys()
         while (factionKeys.hasNext()) {
-            factions.getJSONObject(factionKeys.next()).remove("personality")
-            factions.getJSONObject(factionKeys.next()).remove("lastExpansionTick")
+            val faction = factions.getJSONObject(factionKeys.next())
+            faction.remove("personality")
+            faction.remove("lastExpansionTick")
         }
         file.writeText(root.toString(), Charsets.UTF_8)
 
