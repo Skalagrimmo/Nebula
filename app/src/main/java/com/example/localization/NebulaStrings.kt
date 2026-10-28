@@ -122,10 +122,12 @@ object NebulaStrings {
         "cargo" to "Вантаж",
         "kills" to "Збито",
         "reputation" to "Репутація",
+        "level" to "Рівень",
         "market" to "Ринок товарів",
         "travel" to "Подорож",
         "wormhole" to "Червоточина",
         "upgrade" to "Модернізація",
+        "repair" to "Ремонт корпусу",
         "quests" to "Квести",
         "buy" to "Купити",
         "sell" to "Продати",
@@ -137,6 +139,16 @@ object NebulaStrings {
         "cargo_full" to "Вантажний відсік переповнено!",
         "not_enough_credits" to "Недостатньо кредитів!",
 
+        // Quests
+        "quest_destination" to "Ціль",
+        "quest_kills" to "Знищено",
+        "quest_delivered" to "Доставлено",
+        "quest_active" to "Активний",
+        "quest_done" to "✓ Виконано",
+        "quest_failed" to "Провалено",
+        "quest_rescue_engaged" to "Рятувальна операція розпочата",
+        "quest_board_hint" to "Нові контракти періодично надходять на дошку оголошень.",
+
         // Upgrades
         "up_cargo" to "Вантаж (+5) — 50 кр.",
         "up_hull" to "Корпус (+20) — 70 кр.",
@@ -147,6 +159,9 @@ object NebulaStrings {
         "combat_title" to "Тактичний Бій!",
         "combat_attack" to "Вогонь!",
         "combat_flee" to "Втеча",
+        "combat_scan" to "Сканувати сектор",
+        "combat_scan_hint" to "Сканери в режимі очікування. Запустіть сканування, щоб виявити піратських рейдерів.",
+        "combat_bounty" to "Нагорода:",
         "enemy_destroyed" to "Ворога знищено!",
         "escaped" to "Вдала втеча!",
         "battle_defeat" to "Поразка!",
@@ -186,7 +201,7 @@ object NebulaStrings {
         "guide_title" to "Керівництво командувача",
         "guide_text" to "Nebula 4X поєднує космічну 4X стратегію та симулятор зорельота.\n\n" +
                 "• 4X Режим: Керуйте імперією. Будуйте флоти на столичних планетах, захоплюйте нейтральні системи, досліджуйте технології, укладайте мирні договори та шпигуйте за суперниками.\n" +
-                "• RPG Режим: Натисніть кнопку зміни режиму вгорі, щоб сісти за штурвал особистого зорельота. Торгуйте ресурсами за динамічними цінами, здійснюйте гіперстрибки, остерігайтесь піратів та покращуйте щити і лазери.\n" +
+                "• RPG Режим: Натисніть кнопку зміни режиму вгорі, щоб сісти за штурвал особистого зорельота. Торгуйте ресурсами за динамічними цінами, виконуйте контракти (доставка, полювання на піратів, ескорт, рятування), здійснюйте гіперстрибки, отримуйте досвід та піднімайте рівень капітана.\n" +
                 "• Оптимізація: Векторний тактичний радар спеціально спроектований для максимальної швидкодії навіть на найслабших пристроях."
     )
 
@@ -298,10 +313,12 @@ object NebulaStrings {
         "cargo" to "Cargo",
         "kills" to "Kills",
         "reputation" to "Reputation",
+        "level" to "Level",
         "market" to "Commodities Market",
         "travel" to "Hyperjump",
         "wormhole" to "Wormhole",
         "upgrade" to "Shipyard",
+        "repair" to "Hull Repair",
         "quests" to "Contracts",
         "buy" to "Buy",
         "sell" to "Sell",
@@ -313,6 +330,16 @@ object NebulaStrings {
         "cargo_full" to "Cargo hold is full!",
         "not_enough_credits" to "Not enough credits!",
 
+        // Quests
+        "quest_destination" to "Target",
+        "quest_kills" to "Kills",
+        "quest_delivered" to "Delivered",
+        "quest_active" to "Active",
+        "quest_done" to "✓ Done",
+        "quest_failed" to "Failed",
+        "quest_rescue_engaged" to "Rescue operation engaged",
+        "quest_board_hint" to "New contracts arrive on the board over time.",
+
         // Upgrades
         "up_cargo" to "Cargo (+5) — 50 cr.",
         "up_hull" to "Hull (+20) — 70 cr.",
@@ -323,6 +350,9 @@ object NebulaStrings {
         "combat_title" to "Tactical Engagement!",
         "combat_attack" to "Open Fire!",
         "combat_flee" to "Emergency Warp",
+        "combat_scan" to "Scan for Hostiles",
+        "combat_scan_hint" to "Scanners idle. Run a sweep to locate pirate raiders.",
+        "combat_bounty" to "Bounty:",
         "enemy_destroyed" to "Target Destroyed!",
         "escaped" to "Escape Successful!",
         "battle_defeat" to "Ship Destroyed!",
@@ -362,7 +392,7 @@ object NebulaStrings {
         "guide_title" to "Commander's Handbook",
         "guide_text" to "Nebula 4X unites grand 4X strategy with tactical starship piloting.\n\n" +
                 "• 4X Mode: Command your galactic empire. Build fleets at capital shipyards, colonize neutral worlds, research technologies, negotiate treaties, and spy on rivals.\n" +
-                "• RPG Mode: Switch to the bridge at any time. Trade market commodities, jump through hyperspace lanes or dangerous wormholes, engage hostile pirates, and upgrade your vessel.\n" +
+                "• RPG Mode: Switch to the bridge at any time. Trade market commodities, take on contracts (delivery, bounty hunting, escort, rescue), jump through hyperspace, earn experience and level up your captain.\n" +
                 "• Optimization: The vector tactical radar canvas is specifically designed for 60fps responsiveness on low-memory hardware."
     )
 

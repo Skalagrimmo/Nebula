@@ -2,7 +2,6 @@ package com.example.ui.rpg
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -27,19 +26,23 @@ import com.example.ui.theme.*
 fun RpgCockpitView(
     gameState: GameState,
     lang: GameLanguage,
+    rpgMessage: String?,
     onTravel: (String) -> Unit,
     onWormhole: () -> Unit,
     onBuyItem: (String, Int) -> Unit,
     onSellItem: (String, Int) -> Unit,
     onUpgrade: (String) -> Unit,
-    onFightPirate: () -> Unit,
+    onRepair: () -> Unit,
+    onStartCombat: () -> Unit,
+    onCombatAttack: () -> Unit,
+    onCombatFlee: () -> Unit,
+    onClearMessage: () -> Unit,
     onOpenStarMap: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val ship = gameState.playerShip
     val currentSystem = gameState.systems[ship.location]
     var activeSubModal by remember { mutableStateOf<String?>(null) } // "market", "travel", "upgrade", "quests", "combat"
-    var combatFeedback by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = modifier
@@ -103,12 +106,24 @@ fun RpgCockpitView(
             shape = RoundedCornerShape(12.dp)
         ) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = "🚀 ${NebulaStrings.get("ship_hud", lang)}",
-                    color = TacticalCyan,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "🚀 ${NebulaStrings.get("ship_hud", lang)}",
+                        color = TacticalCyan,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "🎖 ${NebulaStrings.get("level", lang)} ${ship.level} · XP ${ship.xp}/${ship.xpToNextLevel}",
+                        color = StellarGold,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
 
                 // Hull Bar
                 val hullRatio = (ship.hull.toFloat() / ship.hullMax).coerceIn(0f, 1f)
@@ -135,7 +150,33 @@ fun RpgCockpitView(
             }
         }
 
-        // 3. Cockpit Operations Grid
+        // 3. Action Feedback Banner
+        if (rpgMessage != null) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = SpaceDark,
+                border = BorderStroke(1.dp, StellarGold.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(start = 10.dp, end = 2.dp, top = 2.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        rpgMessage,
+                        color = TextPrimary,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = onClearMessage, contentPadding = PaddingValues(4.dp)) {
+                        Text("✕", color = TextSecondary, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+
+        // 4. Cockpit Operations Grid
         Text(
             text = "Station Controls",
             color = TextSecondary,
@@ -164,7 +205,7 @@ fun RpgCockpitView(
             CockpitStationCard(
                 title = NebulaStrings.get("upgrade", lang),
                 icon = "🛠️",
-                subtitle = "Shipyard",
+                subtitle = "Shipyard / Repair",
                 onClick = { activeSubModal = "upgrade" },
                 modifier = Modifier.weight(1f)
             )
@@ -181,10 +222,10 @@ fun RpgCockpitView(
             CockpitStationCard(
                 title = NebulaStrings.get("combat_title", lang),
                 icon = "⚔️",
-                subtitle = "Hunt Corsairs",
+                subtitle = if (gameState.activeEncounter != null) "Engagement Active!" else "Hunt Corsairs",
                 onClick = { activeSubModal = "combat" },
                 modifier = Modifier.weight(1f),
-                accentColor = LaserRed
+                accentColor = if (gameState.activeEncounter != null) LaserRed else TacticalCyan
             )
         }
     }
@@ -311,8 +352,10 @@ fun RpgCockpitView(
         )
     }
 
-    // 3. Upgrades Dialog
+    // 3. Upgrades & Repair Dialog
     if (activeSubModal == "upgrade") {
+        val repairCost = (ship.hullMax - ship.hull) * 2
+        val needsRepair = ship.hull < ship.hullMax
         AlertDialog(
             onDismissRequest = { activeSubModal = null },
             confirmButton = {
@@ -325,6 +368,11 @@ fun RpgCockpitView(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    UpgradeItem(
+                        text = "🔧 ${NebulaStrings.get("repair", lang)} — $repairCost cr.",
+                        enabled = needsRepair && ship.credits >= repairCost,
+                        onClick = { onRepair() }
+                    )
                     UpgradeItem(NebulaStrings.get("up_cargo", lang), ship.credits >= 50) { onUpgrade("cargo") }
                     UpgradeItem(NebulaStrings.get("up_hull", lang), ship.credits >= 70) { onUpgrade("hull") }
                     UpgradeItem(NebulaStrings.get("up_weapon", lang), ship.credits >= 100) { onUpgrade("weapon") }
@@ -349,33 +397,60 @@ fun RpgCockpitView(
                 Text("📜 ${NebulaStrings.get("quests", lang)}", color = StellarGold, fontWeight = FontWeight.Bold)
             },
             text = {
-                LazyColumn(modifier = Modifier.heightIn(max = 350.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(gameState.quests) { q ->
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = SpaceCardBg,
-                            shape = RoundedCornerShape(8.dp),
-                            border = BorderStroke(1.dp, if (q.status == QuestStatus.COMPLETED) ShieldGreen else SpaceCardBorder)
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("${q.type.icon} ${q.name}", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    Text(
-                                        text = when (q.status) {
-                                            QuestStatus.ACTIVE -> "Active"
-                                            QuestStatus.COMPLETED -> "✓ Done"
-                                            QuestStatus.FAILED -> "Failed"
-                                        },
-                                        color = if (q.status == QuestStatus.COMPLETED) ShieldGreen else StellarGold,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    LazyColumn(modifier = Modifier.heightIn(max = 320.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(gameState.quests) { q ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = SpaceCardBg,
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, if (q.status == QuestStatus.COMPLETED) ShieldGreen else SpaceCardBorder)
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text("${q.type.icon} ${q.name}", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        Text(
+                                            text = when (q.status) {
+                                                QuestStatus.ACTIVE -> NebulaStrings.get("quest_active", lang)
+                                                QuestStatus.COMPLETED -> NebulaStrings.get("quest_done", lang)
+                                                QuestStatus.FAILED -> NebulaStrings.get("quest_failed", lang)
+                                            },
+                                            color = if (q.status == QuestStatus.COMPLETED) ShieldGreen else StellarGold,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Text(q.desc, color = TextSecondary, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text(
+                                            "${NebulaStrings.get("quest_destination", lang)}: ${q.destination}",
+                                            color = TacticalCyan,
+                                            fontSize = 11.sp,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                        Text("Reward: +${q.reward} cr.", color = StellarGold, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                                    }
+                                    if (q.status == QuestStatus.ACTIVE) {
+                                        val progressText = when (q.type) {
+                                            QuestType.HUNT -> "${NebulaStrings.get("quest_kills", lang)}: ${q.progress}/${q.killsNeeded}"
+                                            QuestType.DELIVERY -> "${NebulaStrings.get("quest_delivered", lang)}: ${q.progress}/${q.amount}"
+                                            QuestType.RESCUE -> if (q.progress > 0) NebulaStrings.get("quest_rescue_engaged", lang) else null
+                                            else -> null
+                                        }
+                                        if (progressText != null) {
+                                            Text(progressText, color = TextPrimary, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                                        }
+                                    }
                                 }
-                                Text(q.desc, color = TextSecondary, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
-                                Text("Reward: +${q.reward} cr.", color = StellarGold, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                             }
                         }
                     }
+                    Text(
+                        NebulaStrings.get("quest_board_hint", lang),
+                        color = TextMuted,
+                        fontSize = 10.sp,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                    )
                 }
             },
             containerColor = SpaceDark,
@@ -385,6 +460,7 @@ fun RpgCockpitView(
 
     // 5. Combat Dialog
     if (activeSubModal == "combat") {
+        val encounter = gameState.activeEncounter
         AlertDialog(
             onDismissRequest = { activeSubModal = null },
             confirmButton = {
@@ -393,45 +469,75 @@ fun RpgCockpitView(
                 }
             },
             title = {
-                Text("☠️ Corsair Engagement", color = LaserRed, fontWeight = FontWeight.Bold)
+                Text("☠️ ${NebulaStrings.get("combat_title", lang)}", color = LaserRed, fontWeight = FontWeight.Bold)
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Hostile pirate raiders detected in sector scan. Weapons online.", color = TextSecondary, fontSize = 12.sp)
+                    if (encounter == null) {
+                        Text(NebulaStrings.get("combat_scan_hint", lang), color = TextSecondary, fontSize = 12.sp)
+                    } else {
+                        // Enemy telemetry
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = SpaceCardBg,
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, LaserRed.copy(alpha = 0.5f))
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("☠️ ${encounter.enemyName}", color = LaserRed, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text("${NebulaStrings.get("combat_bounty", lang)} ${encounter.bounty} cr.", color = StellarGold, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                                }
+                                val enemyRatio = (encounter.enemyHp.toFloat() / encounter.enemyHpMax).coerceIn(0f, 1f)
+                                LinearProgressIndicator(
+                                    progress = { enemyRatio },
+                                    modifier = Modifier.fillMaxWidth().height(8.dp),
+                                    color = LaserRed,
+                                    trackColor = SpaceDark
+                                )
+                                Text("${encounter.enemyHp} / ${encounter.enemyHpMax} HP", color = TextSecondary, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+                    }
 
-                    if (combatFeedback != null) {
+                    if (rpgMessage != null) {
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             color = SpaceBlack,
                             shape = RoundedCornerShape(8.dp),
                             border = BorderStroke(1.dp, TacticalCyan.copy(alpha = 0.5f))
                         ) {
-                            Text(combatFeedback!!, color = TextPrimary, fontSize = 11.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(8.dp))
+                            Text(rpgMessage, color = TextPrimary, fontSize = 11.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(8.dp))
                         }
                     }
 
-                    Button(
-                        onClick = {
-                            onFightPirate()
-                            combatFeedback = "Volley fired! Sensors update telemetry above."
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = LaserRed, contentColor = TextPrimary),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("⚔️ Open Fire! (Laser T${ship.weapon})", fontWeight = FontWeight.Bold)
-                    }
+                    if (encounter == null) {
+                        Button(
+                            onClick = { onStartCombat() },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = LaserRed, contentColor = TextPrimary),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("🔎 ${NebulaStrings.get("combat_scan", lang)}", fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        Button(
+                            onClick = { onCombatAttack() },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = LaserRed, contentColor = TextPrimary),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("⚔️ ${NebulaStrings.get("combat_attack", lang)} (Laser T${ship.weapon})", fontWeight = FontWeight.Bold)
+                        }
 
-                    Button(
-                        onClick = {
-                            activeSubModal = null
-                            combatFeedback = null
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = SpaceCardBg, contentColor = TextSecondary),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("Emergency Warp Away", fontSize = 12.sp)
+                        Button(
+                            onClick = { onCombatFlee() },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = SpaceCardBg, contentColor = TextSecondary),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("🌀 ${NebulaStrings.get("combat_flee", lang)}", fontSize = 12.sp)
+                        }
                     }
                 }
             },

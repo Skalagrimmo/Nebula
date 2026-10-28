@@ -57,6 +57,7 @@ fun NebulaGameApp(
     val selectedSystem by viewModel.selectedSystem.collectAsStateWithLifecycle()
     val activeDialog by viewModel.activeDialog.collectAsStateWithLifecycle()
     val saveFeedback by viewModel.saveFeedback.collectAsStateWithLifecycle()
+    val rpgMessage by viewModel.rpgMessage.collectAsStateWithLifecycle()
 
     var showMainMenu by remember { mutableStateOf(false) }
     var showFactionSelect by remember { mutableStateOf(false) }
@@ -160,12 +161,17 @@ fun NebulaGameApp(
                 RpgCockpitView(
                     gameState = gameState,
                     lang = currentLang,
+                    rpgMessage = rpgMessage,
                     onTravel = { destId -> viewModel.rpgTravel(destId) },
                     onWormhole = { viewModel.rpgWormhole() },
                     onBuyItem = { item, amt -> viewModel.rpgBuyItem(item, amt) },
                     onSellItem = { item, amt -> viewModel.rpgSellItem(item, amt) },
                     onUpgrade = { type -> viewModel.rpgUpgrade(type) },
-                    onFightPirate = { viewModel.rpgFightPirate() },
+                    onRepair = { viewModel.rpgRepair() },
+                    onStartCombat = { viewModel.rpgStartCombat() },
+                    onCombatAttack = { viewModel.rpgCombatAttack() },
+                    onCombatFlee = { viewModel.rpgCombatFlee() },
+                    onClearMessage = { viewModel.clearRpgMessage() },
                     onOpenStarMap = { viewModel.switchMode("strategy") }
                 )
             }

@@ -41,6 +41,9 @@ class NebulaViewModel : ViewModel() {
     private val _saveFeedback = MutableStateFlow<String?>(null)
     val saveFeedback: StateFlow<String?> = _saveFeedback.asStateFlow()
 
+    private val _rpgMessage = MutableStateFlow<String?>(null)
+    val rpgMessage: StateFlow<String?> = _rpgMessage.asStateFlow()
+
     private var tickerJob: Job? = null
 
     init {
@@ -53,6 +56,7 @@ class NebulaViewModel : ViewModel() {
         _gameState.value = newState
         _selectedSystem.value = newState.systems[newState.getPlayerFaction()?.capital ?: "Sol"] ?: newState.systems.values.firstOrNull()
         _activeDialog.value = null
+        _rpgMessage.value = null
     }
 
     fun loadGame(context: Context) {
@@ -65,6 +69,7 @@ class NebulaViewModel : ViewModel() {
                 _gameState.value = loaded
                 _selectedSystem.value = loaded.systems[loaded.playerShip.location] ?: loaded.systems.values.firstOrNull()
                 _activeDialog.value = null
+                _rpgMessage.value = null
                 _saveFeedback.value = "Game loaded successfully."
             } else {
                 _saveFeedback.value = "No saved game found."
@@ -131,6 +136,10 @@ class NebulaViewModel : ViewModel() {
         _saveFeedback.value = null
     }
 
+    fun clearRpgMessage() {
+        _rpgMessage.value = null
+    }
+
     fun continueInSandbox() {
         val curr = _gameState.value
         curr.sandboxMode = true
@@ -193,33 +202,55 @@ class NebulaViewModel : ViewModel() {
 
     fun rpgTravel(destinationId: String) {
         val curr = _gameState.value
-        val (ok, _) = NebulaSimulationEngine.rpgTravel(curr, destinationId)
+        val (ok, msg) = NebulaSimulationEngine.rpgTravel(curr, destinationId)
+        _rpgMessage.value = msg
         if (ok) {
             _selectedSystem.value = curr.systems[curr.playerShip.location]
-            _gameState.value = curr.copy()
         }
+        _gameState.value = curr.copy()
     }
 
     fun rpgWormhole() {
         val curr = _gameState.value
-        val (ok, _) = NebulaSimulationEngine.rpgWormhole(curr)
+        val (ok, msg) = NebulaSimulationEngine.rpgWormhole(curr)
+        _rpgMessage.value = msg
         if (ok) {
             _selectedSystem.value = curr.systems[curr.playerShip.location]
-            _gameState.value = curr.copy()
         }
+        _gameState.value = curr.copy()
     }
 
     fun rpgUpgrade(type: String) {
         val curr = _gameState.value
-        val (ok, _) = NebulaSimulationEngine.rpgUpgrade(curr, type)
-        if (ok) {
-            _gameState.value = curr.copy()
-        }
+        val (_, msg) = NebulaSimulationEngine.rpgUpgrade(curr, type)
+        _rpgMessage.value = msg
+        _gameState.value = curr.copy()
     }
 
-    fun rpgFightPirate() {
+    fun rpgRepair() {
         val curr = _gameState.value
-        NebulaSimulationEngine.rpgFightPirate(curr)
+        val (_, msg) = NebulaSimulationEngine.rpgRepair(curr)
+        _rpgMessage.value = msg
+        _gameState.value = curr.copy()
+    }
+
+    fun rpgStartCombat() {
+        val curr = _gameState.value
+        val (_, msg) = NebulaSimulationEngine.rpgStartCombat(curr)
+        _rpgMessage.value = msg
+        _gameState.value = curr.copy()
+    }
+
+    fun rpgCombatAttack() {
+        val curr = _gameState.value
+        _rpgMessage.value = NebulaSimulationEngine.rpgCombatAttack(curr)
+        _selectedSystem.value = curr.systems[curr.playerShip.location]
+        _gameState.value = curr.copy()
+    }
+
+    fun rpgCombatFlee() {
+        val curr = _gameState.value
+        _rpgMessage.value = NebulaSimulationEngine.rpgCombatFlee(curr)
         _selectedSystem.value = curr.systems[curr.playerShip.location]
         _gameState.value = curr.copy()
     }
