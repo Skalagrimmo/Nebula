@@ -77,6 +77,20 @@ class NebulaBalanceTest {
     }
 
     @Test
+    fun `AI fleet production stops at territory-scaled limit and can research`() {
+        val state = GalaxyGenerator.createInitialState()
+        val zergon = state.factions.getValue("zergon")
+        zergon.credits = 10_000
+
+        // The starting force has two ships; with one system, the minimum AI cap is three.
+        repeat(10) { NebulaSimulationEngine.processAIActions(state) }
+
+        assertEquals(3, state.fleets.count { it.owner == "zergon" })
+        assertTrue("AI should still have enough credits to invest in technology", zergon.credits > 0)
+        assertTrue("AI research should progress while fleet production is capped", zergon.tech.isNotEmpty())
+    }
+
+    @Test
     fun `pirate fleets cannot annex systems during repeated movement`() {
         val state = GameState(
             factions = mutableMapOf(
