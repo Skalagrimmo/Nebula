@@ -8,6 +8,11 @@ object NebulaSimulationEngine {
     // Monotonic sequence for unique AI fleet IDs
     private var aiFleetSeq = 0
 
+    // Keep AI fleets proportionate to territory so the economy cannot spiral into
+    // unbounded ship production on long-running games.
+    private const val AI_FLEETS_PER_SYSTEM_LIMIT = 2
+    private const val MIN_AI_FLEET_LIMIT = 3
+
     // Monotonic sequence for unique procedural contract IDs
     private var questSeq = 0
 
@@ -69,8 +74,11 @@ object NebulaSimulationEngine {
         for ((factionId, faction) in state.factions) {
             if (factionId == state.playerFactionId && state.mode == "strategy") continue
 
-            // 1. Build the preferred fleet only if affordable; otherwise fall back to a fighter.
-            if (faction.systems.isNotEmpty()) {
+            // 1. Build fleets only while below a territory-scaled force limit.
+            // This preserves room for reinforcement while preventing runaway production.
+            val currentFleetCount = state.fleets.count { it.owner == factionId }
+            val fleetLimit = maxOf(MIN_AI_FLEET_LIMIT, faction.systems.size * AI_FLEETS_PER_SYSTEM_LIMIT)
+            if (faction.systems.isNotEmpty() && currentFleetCount < fleetLimit) {
                 val preferredType = when {
                     faction.personality.aggression > 0.6f -> FleetType.ASSAULT
                     faction.personality.defenseFocus > 0.6f -> FleetType.BATTLESHIP
