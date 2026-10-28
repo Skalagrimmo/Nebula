@@ -30,3 +30,10 @@ jobs:
 
       - name: Build and run unit tests
         run: gradle :app:assembleDebug :app:testDebugUnitTest --stacktrace
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: nebula4x-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
