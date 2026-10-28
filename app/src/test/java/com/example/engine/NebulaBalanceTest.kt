@@ -162,6 +162,17 @@ class NebulaBalanceTest {
     }
 
     @Test
+    fun `RPG mode does not trigger 4X victory conditions`() {
+        val state = GalaxyGenerator.createInitialState(mode = "rpg")
+        state.ticks = 2_400
+        state.factions.getValue("solarian").credits = 150_000
+
+        NebulaSimulationEngine.checkVictory(state)
+
+        assertTrue("RPG mode should not show a strategic victory screen", !state.victoryAchieved)
+    }
+
+    @Test
     fun `domination victory requires at least 80 percent and minimum campaign length`() {
         val state = GalaxyGenerator.createInitialState()
         val solarian = state.factions.getValue("solarian")
