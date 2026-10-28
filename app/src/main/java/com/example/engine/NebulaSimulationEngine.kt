@@ -5,6 +5,9 @@ import kotlin.random.Random
 
 object NebulaSimulationEngine {
 
+    // Monotonic sequence for unique AI fleet IDs
+    private var aiFleetSeq = 0
+
     // Advance simulation by 1 turn
     fun step(state: GameState) {
         state.ticks += 1
@@ -64,7 +67,7 @@ object NebulaSimulationEngine {
                 faction.credits -= type.cost
                 state.fleets.add(
                     Fleet(
-                        id = "ai_fleet_${state.ticks}_${Random.nextInt(1000, 9999)}",
+                        id = "ai_fleet_${state.ticks}_${++aiFleetSeq}",
                         owner = factionId,
                         location = spawnSystem,
                         strength = type.strength.toFloat(),
@@ -557,7 +560,7 @@ object NebulaSimulationEngine {
 
             // Check hunt quests
             for (q in state.quests.filter { it.status == QuestStatus.ACTIVE && it.type == QuestType.HUNT }) {
-                if (q.destination == ship.location || ship.kills >= q.killsNeeded) {
+                if (ship.kills >= q.killsNeeded) {
                     q.status = QuestStatus.COMPLETED
                     ship.credits += q.reward
                 }
