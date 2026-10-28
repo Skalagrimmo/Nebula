@@ -12,6 +12,9 @@ object NebulaSimulationEngine {
     // unbounded ship production on long-running games.
     private const val AI_FLEETS_PER_SYSTEM_LIMIT = 2
     private const val MIN_AI_FLEET_LIMIT = 3
+    // At the default 1-second tick, AI factions can annex at most one system every 2 minutes.
+    private const val AI_CONQUEST_COOLDOWN_TICKS = 120
+    private const val AI_FLEET_MOVE_CHANCE = 0.25f
 
     // Monotonic sequence for unique procedural contract IDs
     private var questSeq = 0
@@ -126,12 +129,28 @@ object NebulaSimulationEngine {
     internal fun processFleetMovement(state: GameState) {
         val fleetsToMove = state.fleets.filter { it.role == "attack" && it.owner != state.playerFactionId }
         for (fleet in fleetsToMove) {
-            if (Random.nextFloat() > 0.4f) continue // movement interval
             val currentSys = state.systems[fleet.location] ?: continue
+            val faction = state.factions[fleet.owner]
+
+            // An AI fleet that reaches an unguarded neutral/enemy system occupies it.
+            // It holds the position until its faction's expansion cooldown expires.
+            if (faction != null && currentSys.owner != fleet.owner) {
+                val currentDefenders = state.fleets.filter {
+                    it.location == currentSys.id && it.owner != fleet.owner
+                }
+                if (currentDefenders.isEmpty()) {
+                    if (state.ticks - faction.lastExpansionTick >= AI_CONQUEST_COOLDOWN_TICKS) {
+                        annexAISystem(state, faction, currentSys, fleet)
+                    }
+                    continue
+                }
+            }
+
+            if (Random.nextFloat() > AI_FLEET_MOVE_CHANCE) continue
             val neighbors = currentSys.neighbors
             if (neighbors.isEmpty()) continue
 
-            // Pick unowned or enemy neighbor
+            // Prefer neutral or enemy territory when available.
             val targets = neighbors.filter { nId ->
                 val nSys = state.systems[nId]
                 nSys != null && nSys.owner != fleet.owner
@@ -139,38 +158,46 @@ object NebulaSimulationEngine {
             val target = if (targets.isNotEmpty()) targets.random() else neighbors.random()
             fleet.location = target
 
-            // Resolve conquest if system is empty or rival
             val targetSys = state.systems[target]
             if (targetSys != null) {
                 val defenderFleets = state.fleets.filter { it.location == target && it.owner != fleet.owner }
                 if (defenderFleets.isEmpty() &&
                     targetSys.owner != fleet.owner &&
-                    state.factions.containsKey(fleet.owner)
+                    faction != null
                 ) {
-                    // Only recognized factions can annex territory; neutral raiders cannot own systems.
-                    val oldOwner = targetSys.owner
-                    if (oldOwner != null) {
-                        state.factions[oldOwner]?.systems?.remove(target)
+                    // If the cooldown is not ready, the fleet stays in this system and
+                    // annexes it later rather than skipping past it to chain-capture others.
+                    if (state.ticks - faction.lastExpansionTick >= AI_CONQUEST_COOLDOWN_TICKS) {
+                        annexAISystem(state, faction, targetSys, fleet)
                     }
-                    targetSys.owner = fleet.owner
-                    state.factions[fleet.owner]?.systems?.add(target)
-                    state.events.add(
-                        0,
-                        GalacticEvent(
-                            id = "conq_${state.ticks}_${fleet.id}",
-                            tick = state.ticks,
-                            titleKey = "System Annexed",
-                            messageKey = "Forces of ${state.factions[fleet.owner]?.name ?: fleet.owner} seized control of ${targetSys.id}!",
-                            systemId = target,
-                            icon = "🚩"
-                        )
-                    )
                 } else if (defenderFleets.isNotEmpty()) {
                     // Battle clash
                     resolveFleetClash(state, fleet, defenderFleets.first())
                 }
             }
         }
+    }
+
+    private fun annexAISystem(state: GameState, faction: Faction, system: StarSystem, fleet: Fleet) {
+        val oldOwner = system.owner
+        if (oldOwner != null) {
+            state.factions[oldOwner]?.systems?.remove(system.id)
+        }
+        system.owner = faction.id
+        if (system.id !in faction.systems) faction.systems.add(system.id)
+        faction.lastExpansionTick = state.ticks
+        state.events.add(
+            0,
+            GalacticEvent(
+                id = "conq_${state.ticks}_${fleet.id}",
+                tick = state.ticks,
+                titleKey = "System Annexed",
+                messageKey = "Forces of ${faction.name} seized control of ${system.id}!",
+                systemId = system.id,
+                factionId = faction.id,
+                icon = "🚩"
+            )
+        )
     }
 
     fun resolveFleetClash(state: GameState, attacker: Fleet, defender: Fleet): String {
