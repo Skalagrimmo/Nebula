@@ -27,7 +27,9 @@ data class GameState(
     var victoryAchieved: Boolean = false,
     var winnerFactionId: String? = null,
     var victoryType: String? = null,
-    var sandboxMode: Boolean = false
+    var sandboxMode: Boolean = false,
+    /** UI-only revision: lets StateFlow publish updates despite mutable nested game models. */
+    var uiRevision: Long = 0L
 ) {
     fun getPlayerFaction(): Faction? = factions[playerFactionId]
 }
