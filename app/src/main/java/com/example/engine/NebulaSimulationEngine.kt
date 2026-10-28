@@ -16,6 +16,11 @@ object NebulaSimulationEngine {
     private const val AI_CONQUEST_COOLDOWN_TICKS = 120
     private const val AI_FLEET_MOVE_CHANCE = 0.25f
 
+    // 2,400 turns is 40 minutes at the default 1-second tick interval.
+    private const val MIN_VICTORY_TICKS = 2_400
+    private const val DOMINATION_SYSTEM_RATIO = 0.80f
+    private const val ECONOMIC_VICTORY_CREDITS = 150_000
+
     // Monotonic sequence for unique procedural contract IDs
     private var questSeq = 0
 
@@ -321,31 +326,41 @@ object NebulaSimulationEngine {
         if (state.ticks >= 100) unlockAchievement(state, "survivor")
     }
 
-    private fun checkVictory(state: GameState) {
+    internal fun checkVictory(state: GameState) {
+        // A campaign must have room for economic development, research and territorial wars.
+        // This is measured in simulation turns, so the player's chosen game speed still applies.
+        if (state.victoryAchieved || state.sandboxMode || state.ticks < MIN_VICTORY_TICKS) return
+
         val totalSystems = state.systems.size
+        if (totalSystems <= 0) return
 
-        for ((id, faction) in state.factions) {
-            // 1. Domination (>= 75% of systems)
-            if (faction.systems.size.toFloat() / totalSystems >= 0.75f) {
-                state.victoryAchieved = true
-                state.winnerFactionId = id
-                state.victoryType = "domination"
-                if (id == state.playerFactionId) unlockAchievement(state, "victor")
-                return
-            }
-
-            // 2. Economic (>= 20,000 credits)
-            if (faction.credits >= 20000) {
-                state.victoryAchieved = true
-                state.winnerFactionId = id
-                state.victoryType = "economic"
-                if (id == state.playerFactionId) unlockAchievement(state, "victor")
-                return
-            }
+        // Resolve victory types in a consistent global order: domination, economy, then military.
+        val dominationWinner = state.factions.values.firstOrNull {
+            it.systems.size.toFloat() / totalSystems >= DOMINATION_SYSTEM_RATIO
+        }
+        if (dominationWinner != null) {
+            state.victoryAchieved = true
+            state.winnerFactionId = dominationWinner.id
+            state.victoryType = "domination"
+            if (dominationWinner.id == state.playerFactionId) unlockAchievement(state, "victor")
+            return
         }
 
-        // 3. Military (All other factions eliminated)
-        val activeFactions = state.factions.filter { (_, f) -> f.systems.isNotEmpty() || state.fleets.any { fl -> fl.owner == f.id } }
+        val economicWinner = state.factions.values.firstOrNull {
+            it.credits >= ECONOMIC_VICTORY_CREDITS
+        }
+        if (economicWinner != null) {
+            state.victoryAchieved = true
+            state.winnerFactionId = economicWinner.id
+            state.victoryType = "economic"
+            if (economicWinner.id == state.playerFactionId) unlockAchievement(state, "victor")
+            return
+        }
+
+        // Military victory requires every rival to have lost both its territory and fleets.
+        val activeFactions = state.factions.filter { (_, faction) ->
+            faction.systems.isNotEmpty() || state.fleets.any { fleet -> fleet.owner == faction.id }
+        }
         if (activeFactions.size == 1) {
             val soleWinner = activeFactions.keys.first()
             state.victoryAchieved = true
