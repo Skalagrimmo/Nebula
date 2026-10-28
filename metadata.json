@@ -1,0 +1,6 @@
+{
+  "name": "Nebula 4X",
+  "description": "Galactic 4X space strategy and RPG game optimized for low-end devices with tactical vector radar and dual command modes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
