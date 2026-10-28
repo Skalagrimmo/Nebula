@@ -43,45 +43,60 @@ object NebulaSimulationEngine {
         }
     }
 
-    private fun processEconomy(state: GameState) {
-        for ((_, system) in state.systems) {
+    internal fun processEconomy(state: GameState) {
+        // System income is earned separately for every owned system.
+        for (system in state.systems.values) {
             val owner = system.owner ?: continue
             val faction = state.factions[owner] ?: continue
 
             val econMult = if (faction.tech.contains("economy")) 1.25f else 1.0f
-            val income = ((system.economy * 0.15f + system.population * 0.05f) * econMult).toInt().coerceAtLeast(1)
+            val income = ((system.economy * 0.15f + system.population * 0.05f) * econMult)
+                .toInt()
+                .coerceAtLeast(1)
             faction.credits += income
+        }
 
-            // Fleet upkeep
-            val fleetCount = state.fleets.count { it.owner == owner }
-            faction.credits = (faction.credits - (fleetCount * 3)).coerceAtLeast(0)
+        // Fleet upkeep is paid once per faction per tick, not once per owned system.
+        for ((factionId, faction) in state.factions) {
+            val fleetCount = state.fleets.count { it.owner == factionId }
+            if (fleetCount > 0) {
+                faction.credits = (faction.credits - fleetCount * 3).coerceAtLeast(0)
+            }
         }
     }
 
-    private fun processAIActions(state: GameState) {
+    internal fun processAIActions(state: GameState) {
         for ((factionId, faction) in state.factions) {
             if (factionId == state.playerFactionId && state.mode == "strategy") continue
 
-            // 1. Build fleets if rich enough
-            if (faction.credits >= 120 && faction.systems.isNotEmpty()) {
-                val spawnSystem = faction.capital ?: faction.systems.first()
-                val type = when {
+            // 1. Build the preferred fleet only if affordable; otherwise fall back to a fighter.
+            if (faction.systems.isNotEmpty()) {
+                val preferredType = when {
                     faction.personality.aggression > 0.6f -> FleetType.ASSAULT
                     faction.personality.defenseFocus > 0.6f -> FleetType.BATTLESHIP
                     else -> FleetType.FIGHTER
                 }
-                faction.credits -= type.cost
-                state.fleets.add(
-                    Fleet(
-                        id = "ai_fleet_${state.ticks}_${++aiFleetSeq}",
-                        owner = factionId,
-                        location = spawnSystem,
-                        strength = type.strength.toFloat(),
-                        speed = type.speed,
-                        type = type,
-                        role = if (faction.personality.aggression > 0.5f) "attack" else "defense"
+                val type = when {
+                    faction.credits >= preferredType.cost -> preferredType
+                    faction.credits >= FleetType.FIGHTER.cost -> FleetType.FIGHTER
+                    else -> null
+                }
+
+                if (type != null) {
+                    val spawnSystem = faction.capital ?: faction.systems.first()
+                    faction.credits -= type.cost
+                    state.fleets.add(
+                        Fleet(
+                            id = "ai_fleet_${state.ticks}_${++aiFleetSeq}",
+                            owner = factionId,
+                            location = spawnSystem,
+                            strength = type.strength.toFloat(),
+                            speed = type.speed,
+                            type = type,
+                            role = if (faction.personality.aggression > 0.5f) "attack" else "defense"
+                        )
                     )
-                )
+                }
             }
 
             // 2. Research tech if credits permit
