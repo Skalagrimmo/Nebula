@@ -1,8 +1,12 @@
 package com.example.engine
 
+import com.example.model.Faction
+import com.example.model.Fleet
 import com.example.model.FleetType
+import com.example.model.GameState
 import com.example.model.QuestStatus
 import com.example.model.QuestType
+import com.example.model.StarSystem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -17,6 +21,77 @@ import org.junit.Test
 class NebulaEngineTest {
 
     private fun newState(mode: String = "strategy") = GalaxyGenerator.createInitialState(mode = mode)
+
+    @Test
+    fun `fleet upkeep is charged once per faction per tick`() {
+        val faction = Faction(
+            id = "solarian",
+            name = "Solarian Empire",
+            displayName = "Solarian Empire",
+            credits = 1_000,
+            systems = mutableListOf("Sol", "Vega")
+        )
+        val state = GameState(
+            playerFactionId = "solarian",
+            factions = mutableMapOf("solarian" to faction),
+            systems = mutableMapOf(
+                "Sol" to StarSystem(
+                    id = "Sol",
+                    owner = "solarian",
+                    economy = 40,
+                    population = 100
+                ),
+                "Vega" to StarSystem(
+                    id = "Vega",
+                    owner = "solarian",
+                    economy = 20,
+                    population = 50
+                )
+            ),
+            fleets = mutableListOf(
+                Fleet(
+                    id = "player-fleet",
+                    owner = "solarian",
+                    location = "Sol",
+                    strength = 10f,
+                    role = "defense"
+                )
+            )
+        )
+
+        NebulaSimulationEngine.processEconomy(state)
+
+        // Sol income: 11, Vega income: 5, one fleet upkeep charge: 3.
+        assertEquals(1_013, faction.credits)
+    }
+
+    @Test
+    fun `AI uses an affordable fallback ship when preferred ship is too expensive`() {
+        val ai = Faction(
+            id = "zergon",
+            name = "Zergon Hive",
+            displayName = "Zergon Hive",
+            capital = "Sol",
+            credits = 120,
+            systems = mutableListOf("Sol")
+        ).apply {
+            personality.aggression = 0.9f // Prefers the 150-credit assault fleet.
+        }
+        val state = GameState(
+            playerFactionId = "solarian",
+            factions = mutableMapOf("zergon" to ai),
+            systems = mutableMapOf(
+                "Sol" to StarSystem(id = "Sol", owner = "zergon")
+            )
+        )
+
+        NebulaSimulationEngine.processAIActions(state)
+
+        assertEquals(1, state.fleets.size)
+        assertEquals(FleetType.FIGHTER, state.fleets.single().type)
+        assertEquals(20, ai.credits)
+        assertTrue("AI credits must never become negative", ai.credits >= 0)
+    }
 
     @Test
     fun `step advances tick counter and stardate`() {
