@@ -16,6 +16,7 @@ data class GameState(
     val factions: MutableMap<String, Faction> = mutableMapOf(),
     val fleets: MutableList<Fleet> = mutableListOf(),
     var playerShip: PlayerShip = PlayerShip(),
+    var activeEncounter: PirateEncounter? = null,
     val quests: MutableList<Quest> = mutableListOf(),
     val achievements: MutableList<Achievement> = AchievementCatalog.ACHIEVEMENTS.map { it.copy() }.toMutableList(),
     val diplomacy: MutableMap<String, MutableMap<String, DiplomacyRelation>> = mutableMapOf(),

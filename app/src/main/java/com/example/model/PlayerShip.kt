@@ -10,11 +10,17 @@ data class PlayerShip(
     var weapon: Int = 1,
     var shield: Float = 0.0f,
     var reputation: Int = 50,
-    var kills: Int = 0
+    var kills: Int = 0,
+    var xp: Int = 0,
+    var level: Int = 1
 ) {
     val totalCargo: Int
         get() = cargo.values.sum()
 
     val availableCargo: Int
         get() = (cargoLimit - totalCargo).coerceAtLeast(0)
+
+    /** Experience required to reach the next captain level. */
+    val xpToNextLevel: Int
+        get() = level * 100
 }

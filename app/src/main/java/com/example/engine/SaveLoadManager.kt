@@ -101,11 +101,35 @@ object SaveLoadManager {
                 put("shield", ship.shield.toDouble())
                 put("reputation", ship.reputation)
                 put("kills", ship.kills)
+                put("xp", ship.xp)
+                put("level", ship.level)
                 val cargoObj = JSONObject()
                 ship.cargo.forEach { (k, v) -> cargoObj.put(k, v) }
                 put("cargo", cargoObj)
             }
             root.put("playerShip", shipObj)
+
+            // Quests
+            val questsArr = JSONArray()
+            for (q in state.quests) {
+                val qObj = JSONObject().apply {
+                    put("id", q.id)
+                    put("type", q.type.code)
+                    put("name", q.name)
+                    put("desc", q.desc)
+                    put("destination", q.destination)
+                    put("item", q.item ?: JSONObject.NULL)
+                    put("amount", q.amount)
+                    put("reward", q.reward)
+                    put("bonus", q.bonus)
+                    put("status", q.status.name)
+                    put("source", q.source)
+                    put("killsNeeded", q.killsNeeded)
+                    put("progress", q.progress)
+                }
+                questsArr.put(qObj)
+            }
+            root.put("quests", questsArr)
 
             // Achievements
             val achArr = JSONArray()
@@ -263,8 +287,42 @@ object SaveLoadManager {
                     weapon = shipObj.optInt("weapon", 1),
                     shield = shipObj.optDouble("shield", 0.0).toFloat(),
                     reputation = shipObj.optInt("reputation", 50),
-                    kills = shipObj.optInt("kills", 0)
+                    kills = shipObj.optInt("kills", 0),
+                    xp = shipObj.optInt("xp", 0),
+                    level = shipObj.optInt("level", 1)
                 )
+            }
+
+            // Quests
+            val questsArr = root.optJSONArray("quests")
+            if (questsArr != null) {
+                for (i in 0 until questsArr.length()) {
+                    val qObj = questsArr.getJSONObject(i)
+                    val type = QuestType.values().firstOrNull { it.code == qObj.optString("type", "delivery") }
+                        ?: QuestType.DELIVERY
+                    val status = when (qObj.optString("status", "ACTIVE")) {
+                        "COMPLETED" -> QuestStatus.COMPLETED
+                        "FAILED" -> QuestStatus.FAILED
+                        else -> QuestStatus.ACTIVE
+                    }
+                    state.quests.add(
+                        Quest(
+                            id = qObj.getString("id"),
+                            type = type,
+                            name = qObj.getString("name"),
+                            desc = qObj.getString("desc"),
+                            destination = qObj.getString("destination"),
+                            item = if (qObj.isNull("item")) null else qObj.optString("item"),
+                            amount = qObj.optInt("amount", 0),
+                            reward = qObj.optInt("reward", 0),
+                            bonus = qObj.optInt("bonus", 0),
+                            status = status,
+                            source = qObj.optString("source", "Sol"),
+                            killsNeeded = qObj.optInt("killsNeeded", 3),
+                            progress = qObj.optInt("progress", 0)
+                        )
+                    )
+                }
             }
 
             // Achievements

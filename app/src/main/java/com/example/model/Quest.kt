@@ -26,5 +26,6 @@ data class Quest(
     val bonus: Int = 0,
     var status: QuestStatus = QuestStatus.ACTIVE,
     val source: String,
-    val killsNeeded: Int = 3
+    val killsNeeded: Int = 3,
+    var progress: Int = 0
 )

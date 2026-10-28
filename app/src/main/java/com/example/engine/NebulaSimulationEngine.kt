@@ -8,6 +8,9 @@ object NebulaSimulationEngine {
     // Monotonic sequence for unique AI fleet IDs
     private var aiFleetSeq = 0
 
+    // Monotonic sequence for unique procedural contract IDs
+    private var questSeq = 0
+
     // Advance simulation by 1 turn
     fun step(state: GameState) {
         state.ticks += 1
@@ -31,7 +34,10 @@ object NebulaSimulationEngine {
         // 6. Check Achievements
         checkAchievements(state)
 
-        // 7. Check Victory Conditions
+        // 7. RPG contract board refresh
+        processRpgContracts(state)
+
+        // 8. Check Victory Conditions
         if (!state.victoryAchieved && !state.sandboxMode) {
             checkVictory(state)
         }
@@ -417,11 +423,152 @@ object NebulaSimulationEngine {
 
     // --- RPG Player Starship Actions ---
 
+    private val pirateNames = listOf("Corsair", "Raider", "Marauder", "Reaver", "Buccaneer")
+    private val tradeGoods = listOf("ore", "food", "tech")
+
+    /**
+     * Reputation above 50 grants up to +20% better trade terms and contract
+     * payouts (cheaper buys, richer sells, larger quest rewards).
+     */
+    private fun reputationBonus(ship: PlayerShip): Float =
+        ((ship.reputation - 50).coerceIn(0, 50)) / 250f
+
+    /** Adds captain experience; returns a message when a new level is reached. */
+    private fun addXp(state: GameState, amount: Int): String? {
+        val ship = state.playerShip
+        ship.xp += amount
+        var levelMsg: String? = null
+        while (ship.xp >= ship.level * 100) {
+            ship.xp -= ship.level * 100
+            ship.level += 1
+            ship.hullMax += 10
+            ship.hull = ship.hullMax
+            ship.shield = (ship.shield + 0.02f).coerceAtMost(0.9f)
+            levelMsg = "LEVEL UP! Captain rank ${ship.level} reached: +10 max hull, +2% shield deflection."
+        }
+        return levelMsg
+    }
+
+    /** Marks a contract fulfilled, pays out the reward scaled by reputation, awards XP. */
+    private fun completeQuest(state: GameState, q: Quest, repBonus: Int) {
+        if (q.status != QuestStatus.ACTIVE) return
+        q.status = QuestStatus.COMPLETED
+        val ship = state.playerShip
+        val payout = (q.reward * (1f + reputationBonus(ship))).toInt() + q.bonus
+        ship.credits += payout
+        ship.reputation = (ship.reputation + repBonus).coerceAtMost(100)
+        val levelMsg = addXp(state, 30 + q.reward / 10)
+        state.events.add(
+            0,
+            GalacticEvent(
+                id = "q_comp_${state.ticks}",
+                tick = state.ticks,
+                titleKey = "Contract Complete",
+                messageKey = "\"${q.name}\" fulfilled! Payout: $payout cr.${levelMsg?.let { " $it" } ?: ""}",
+                icon = "✅"
+            )
+        )
+    }
+
+    /** Periodically offers a new procedural contract while the active count stays under the cap. */
+    private fun processRpgContracts(state: GameState) {
+        if (state.mode != "rpg") return
+        if (state.ticks % 8 != 0) return
+        if (state.quests.count { it.status == QuestStatus.ACTIVE } >= 5) return
+        if (Random.nextFloat() > 0.6f) return
+        rpgGenerateQuest(state)
+    }
+
+    /** Generates one procedural contract from the current system's board. */
+    fun rpgGenerateQuest(state: GameState): Quest? {
+        val ship = state.playerShip
+        val source = ship.location
+        val candidates = state.systems.keys.filter { it != source }
+        if (candidates.isEmpty()) return null
+        val dest = candidates.random()
+        val id = "q_${state.ticks}_${++questSeq}"
+
+        val quest = when (Random.nextInt(5)) {
+            0 -> {
+                val item = tradeGoods.random()
+                val amount = Random.nextInt(3, 7)
+                Quest(
+                    id = id,
+                    type = QuestType.DELIVERY,
+                    name = "Supply Run to $dest",
+                    desc = "Deliver $amount units of ${item.replaceFirstChar { it.uppercase() }} to the $dest station.",
+                    destination = dest,
+                    item = item,
+                    amount = amount,
+                    reward = 40 + amount * 12,
+                    bonus = 20,
+                    source = source
+                )
+            }
+            1 -> {
+                val kills = Random.nextInt(2, 5)
+                Quest(
+                    id = id,
+                    type = QuestType.HUNT,
+                    name = "Bounty Contract: $dest",
+                    desc = "Destroy $kills pirate vessels operating in the $dest system.",
+                    destination = dest,
+                    reward = 80 + kills * 30,
+                    bonus = 30,
+                    source = source,
+                    killsNeeded = kills
+                )
+            }
+            2 -> Quest(
+                id = id,
+                type = QuestType.EXPLORE,
+                name = "Survey: $dest",
+                desc = "Chart the $dest system and transmit stellar cartography data.",
+                destination = dest,
+                reward = 70,
+                bonus = 25,
+                source = source
+            )
+            3 -> Quest(
+                id = id,
+                type = QuestType.ESCORT,
+                name = "Convoy Escort to $dest",
+                desc = "Escort a merchant convoy safely to $dest. Expect hostile interference en route.",
+                destination = dest,
+                reward = 130,
+                bonus = 40,
+                source = source
+            )
+            else -> Quest(
+                id = id,
+                type = QuestType.RESCUE,
+                name = "Distress Call: $dest",
+                desc = "A stranded crew in the $dest system is under corsair threat. Rescue the survivors.",
+                destination = dest,
+                reward = 150,
+                bonus = 50,
+                source = source
+            )
+        }
+        state.quests.add(quest)
+        state.events.add(
+            0,
+            GalacticEvent(
+                id = "q_new_${state.ticks}",
+                tick = state.ticks,
+                titleKey = "New Contract",
+                messageKey = "Contract board update: \"${quest.name}\" is now available.",
+                icon = quest.type.icon
+            )
+        )
+        return quest
+    }
+
     fun rpgBuyItem(state: GameState, item: String, amount: Int): Boolean {
         val ship = state.playerShip
         val currentSys = state.systems[ship.location] ?: return false
         val price = currentSys.prices[item] ?: return false
-        val totalCost = price * amount
+        val totalCost = (price * amount * (1f - reputationBonus(ship))).toInt()
 
         if (ship.credits < totalCost) return false
         if (ship.availableCargo < amount) return false
@@ -438,27 +585,18 @@ object NebulaSimulationEngine {
         if (currentCargo < amount) return false
 
         val price = currentSys.prices[item] ?: return false
-        val totalRevenue = price * amount
+        val totalRevenue = (price * amount * (1f + reputationBonus(ship))).toInt()
 
         ship.credits += totalRevenue
         ship.cargo[item] = currentCargo - amount
 
-        // Check if fulfilling delivery quest
+        // Accumulate partial deliveries for matching delivery contracts at this station
         for (q in state.quests.filter { it.status == QuestStatus.ACTIVE && it.type == QuestType.DELIVERY }) {
             if (q.destination == ship.location && q.item == item) {
-                q.status = QuestStatus.COMPLETED
-                ship.credits += q.reward + q.bonus
-                ship.reputation += 10
-                state.events.add(
-                    0,
-                    GalacticEvent(
-                        id = "q_comp_${state.ticks}",
-                        tick = state.ticks,
-                        titleKey = "Contract Complete",
-                        messageKey = "Delivery to ${q.destination} fulfilled! Earned ${q.reward + q.bonus} credits.",
-                        icon = "📦"
-                    )
-                )
+                q.progress += amount
+                if (q.progress >= q.amount) {
+                    completeQuest(state, q, 10)
+                }
             }
         }
         return true
@@ -475,18 +613,45 @@ object NebulaSimulationEngine {
         ship.location = destinationId
         step(state) // travel takes 1 game turn
 
-        // Check exploration quest
-        for (q in state.quests.filter { it.status == QuestStatus.ACTIVE && it.type == QuestType.EXPLORE }) {
-            if (q.destination == destinationId) {
-                q.status = QuestStatus.COMPLETED
-                ship.credits += q.reward
-                ship.reputation += 15
+        var message = "Hyperspace jump to $destinationId successful."
+
+        // Contract progress on arrival
+        for (q in state.quests.filter { it.status == QuestStatus.ACTIVE && q.destination == destinationId }) {
+            when (q.type) {
+                QuestType.EXPLORE -> {
+                    completeQuest(state, q, 15)
+                    message = "Stellar survey of $destinationId complete. Contract fulfilled!"
+                }
+                QuestType.ESCORT -> {
+                    if (Random.nextFloat() < 0.35f) {
+                        rpgStartCombat(state)
+                        message = "Convoy ambushed en route to $destinationId! The freighter made it — drive off the raiders!"
+                    } else {
+                        completeQuest(state, q, 12)
+                        message = "Merchant convoy delivered safely to $destinationId. Contract fulfilled!"
+                    }
+                }
+                QuestType.RESCUE -> {
+                    if (q.progress == 0) {
+                        q.progress = 1
+                        rpgStartCombat(state, questId = q.id)
+                        message = "Distress beacon located at $destinationId — corsairs are stripping the wreck. Engage to rescue the crew!"
+                    } else {
+                        completeQuest(state, q, 15)
+                        message = "Survivors recovered at $destinationId. Contract fulfilled!"
+                    }
+                }
+                else -> {}
             }
         }
 
-        // Random chance of pirate encounter in deep space
-        val encounter = Random.nextFloat() < 0.25f
-        return true to if (encounter) "Hyperspace jump complete. WARNING: Pirate raider on radar!" else "Hyperspace jump to $destinationId successful."
+        // Random deep-space pirate ambush on the lane
+        if (state.activeEncounter == null && Random.nextFloat() < 0.22f) {
+            rpgStartCombat(state)
+            message = "Hyperspace jump complete. WARNING: pirate raider on radar!"
+        }
+
+        return true to message
     }
 
     fun rpgWormhole(state: GameState): Pair<Boolean, String> {
@@ -497,7 +662,12 @@ object NebulaSimulationEngine {
         ship.location = wormholeTarget
         step(state)
 
-        return true to "Sub-space anomaly traversed! Emerge at $wormholeTarget."
+        return if (Random.nextFloat() < 0.15f) {
+            rpgStartCombat(state)
+            true to "Sub-space anomaly traversed! Emerge at $wormholeTarget — the turbulence attracted a hostile contact!"
+        } else {
+            true to "Sub-space anomaly traversed! Emerge at $wormholeTarget."
+        }
     }
 
     fun rpgUpgrade(state: GameState, type: String): Pair<Boolean, String> {
@@ -532,43 +702,116 @@ object NebulaSimulationEngine {
         }
     }
 
-    fun rpgFightPirate(state: GameState): Triple<Boolean, Boolean, String> {
-        // Returns: (Victory, Escaped, Details)
+    /** Station repair service: 2 credits per missing hull point. */
+    fun rpgRepair(state: GameState): Pair<Boolean, String> {
         val ship = state.playerShip
-        val pirateHp = Random.nextInt(35, 70)
-        val shipDamage = (ship.weapon * 18 * (1f + Random.nextFloat() * 0.5f)).toInt()
-        val pirateDamage = ((Random.nextInt(15, 30) * (1f - ship.shield)).toInt()).coerceAtLeast(5)
+        val missing = ship.hullMax - ship.hull
+        if (missing <= 0) return false to "Hull integrity already at maximum."
+        val cost = missing * 2
+        if (ship.credits < cost) return false to "Full repair costs $cost cr. — insufficient funds."
+        ship.credits -= cost
+        ship.hull = ship.hullMax
+        return true to "Dock crews restore hull plating (+$missing HP) for $cost cr."
+    }
 
-        ship.hull = (ship.hull - pirateDamage).coerceAtLeast(0)
-
-        if (ship.hull <= 0) {
-            // Respawn at capital with fee
-            val capital = state.getPlayerFaction()?.capital ?: "Sol"
-            ship.location = capital
-            ship.hull = 60
-            ship.credits = (ship.credits * 0.7f).toInt()
-            return Triple(false, false, "Ship destroyed! Emergency pod recovered at $capital (-30% credits).")
+    /**
+     * Begins a multi-round engagement. The hostile is persistent until it is
+     * destroyed, the player flees, or the player's ship goes down.
+     */
+    fun rpgStartCombat(state: GameState, questId: String? = null): Pair<Boolean, String> {
+        val ship = state.playerShip
+        if (state.activeEncounter != null) {
+            return false to "Weapons already locked on an active hostile!"
         }
+        val name = pirateNames.random()
+        val hp = Random.nextInt(30, 45) + ship.weapon * 12
+        state.activeEncounter = PirateEncounter(
+            id = "enc_${state.ticks}",
+            enemyName = name,
+            enemyHp = hp,
+            enemyHpMax = hp,
+            enemyDamage = Random.nextInt(12, 20) + ship.weapon * 2,
+            bounty = Random.nextInt(30, 60) + ship.weapon * 10,
+            salvageItem = tradeGoods.random(),
+            salvageAmount = Random.nextInt(1, 3),
+            questId = questId
+        )
+        return true to "Hostile $name detected (${hp} HP)! Weapons online."
+    }
 
-        if (shipDamage >= pirateHp) {
+    private fun shipDestroyed(state: GameState): String {
+        val ship = state.playerShip
+        val capital = state.getPlayerFaction()?.capital ?: "Sol"
+        ship.location = capital
+        ship.hull = 60
+        ship.credits = (ship.credits * 0.7f).toInt()
+        state.activeEncounter = null
+        return "Ship destroyed! Emergency pod recovered at $capital (-30% credits)."
+    }
+
+    /** One volley of the ongoing engagement. */
+    fun rpgCombatAttack(state: GameState): String {
+        val enc = state.activeEncounter ?: return "No hostile contact on scanners."
+        val ship = state.playerShip
+
+        val damage = (ship.weapon * 18 * (1f + Random.nextFloat() * 0.5f)).toInt() + ship.level * 3
+        enc.enemyHp -= damage
+
+        if (enc.enemyHp <= 0) {
+            state.activeEncounter = null
             ship.kills += 1
-            val bounty = Random.nextInt(35, 80)
-            ship.credits += bounty
-            ship.reputation += 5
+            ship.credits += enc.bounty
+            ship.reputation = (ship.reputation + 5).coerceAtMost(100)
             unlockAchievement(state, "first_blood")
             if (ship.kills >= 5) unlockAchievement(state, "pirate_hunter")
 
-            // Check hunt quests
+            var salvageMsg = ""
+            if (ship.availableCargo > 0) {
+                val salvaged = minOf(enc.salvageAmount, ship.availableCargo)
+                ship.cargo[enc.salvageItem] = (ship.cargo[enc.salvageItem] ?: 0) + salvaged
+                salvageMsg = " Salvage: +$salvaged ${enc.salvageItem}."
+            }
+
+            // Hunt contract progress (kills count in the contract's system)
             for (q in state.quests.filter { it.status == QuestStatus.ACTIVE && it.type == QuestType.HUNT }) {
-                if (ship.kills >= q.killsNeeded) {
-                    q.status = QuestStatus.COMPLETED
-                    ship.credits += q.reward
+                if (q.destination == ship.location) {
+                    q.progress += 1
+                    if (q.progress >= q.killsNeeded) completeQuest(state, q, 8)
                 }
             }
 
-            return Triple(true, false, "Target neutralized! Bounty collected: +$bounty cr. (Hull: ${ship.hull}/${ship.hullMax})")
+            // Rescue contract: the corsair holding the survivors is destroyed
+            if (enc.questId != null) {
+                val rescue = state.quests.firstOrNull { it.id == enc.questId && it.status == QuestStatus.ACTIVE }
+                if (rescue != null) completeQuest(state, rescue, 15)
+            }
+
+            val levelMsg = addXp(state, 25)
+            return "Target destroyed! Bounty: +${enc.bounty} cr.$salvageMsg${levelMsg?.let { " $it" } ?: ""} (Hull: ${ship.hull}/${ship.hullMax})"
         }
 
-        return Triple(false, false, "Target damaged (-$shipDamage HP), took -$pirateDamage damage. (Hull: ${ship.hull}/${ship.hullMax})")
+        // Enemy counter-fire
+        val incoming = (enc.enemyDamage * (1f - ship.shield)).toInt().coerceAtLeast(4)
+        ship.hull -= incoming
+        if (ship.hull <= 0) return shipDestroyed(state)
+
+        return "Volley hits for -$damage. ${enc.enemyName} returns fire: -$incoming. (Enemy: ${enc.enemyHp}/${enc.enemyHpMax} HP | Hull: ${ship.hull}/${ship.hullMax})"
+    }
+
+    /** Attempt to disengage. Higher captain level and shields improve the odds. */
+    fun rpgCombatFlee(state: GameState): String {
+        val enc = state.activeEncounter ?: return "No hostile contact on scanners."
+        val ship = state.playerShip
+        val escapeChance = (0.5f + ship.level * 0.05f + ship.shield * 0.2f).coerceAtMost(0.95f)
+        state.activeEncounter = null
+
+        if (Random.nextFloat() < escapeChance) {
+            return "Emergency warp successful — the ${enc.enemyName} lost your trail. (Hull: ${ship.hull}/${ship.hullMax})"
+        }
+
+        val incoming = (enc.enemyDamage * (1f - ship.shield)).toInt().coerceAtLeast(4)
+        ship.hull -= incoming
+        if (ship.hull <= 0) return shipDestroyed(state)
+        return "Escaped the ${enc.enemyName}, but the parting volley cost -$incoming hull. (Hull: ${ship.hull}/${ship.hullMax})"
     }
 }
