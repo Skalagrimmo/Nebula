@@ -1,11 +1,13 @@
 package com.example.engine
 
 import android.content.Context
+import android.util.AtomicFile
 import android.util.Log
 import com.example.model.*
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 
 object SaveLoadManager {
 
@@ -13,6 +15,8 @@ object SaveLoadManager {
     private const val TAG = "SaveLoadManager"
 
     fun saveGame(context: Context, state: GameState): Boolean {
+        val atomicFile = AtomicFile(File(context.filesDir, SAVE_FILE_NAME))
+        var outputStream: FileOutputStream? = null
         return try {
             val root = JSONObject()
             root.put("version", state.version)
@@ -37,6 +41,8 @@ object SaveLoadManager {
                     put("resources", sys.resources)
                     put("stock", sys.stock)
                     put("demand", sys.demand)
+                    put("value", sys.value.toDouble())
+                    put("description", sys.description)
                     put("posX", sys.posX.toDouble())
                     put("posY", sys.posY.toDouble())
                     put("type", sys.type.code)
@@ -62,6 +68,14 @@ object SaveLoadManager {
                     put("systems", JSONArray(fac.systems))
                     put("tech", JSONArray(fac.tech))
                     put("strategy", fac.strategy)
+                    val personalityObj = JSONObject().apply {
+                        put("aggression", fac.personality.aggression.toDouble())
+                        put("economyFocus", fac.personality.economyFocus.toDouble())
+                        put("expansionFocus", fac.personality.expansionFocus.toDouble())
+                        put("defenseFocus", fac.personality.defenseFocus.toDouble())
+                        put("risk", fac.personality.risk.toDouble())
+                    }
+                    put("personality", personalityObj)
                     val statsObj = JSONObject().apply {
                         put("wins", fac.stats.wins)
                         put("losses", fac.stats.losses)
@@ -72,6 +86,51 @@ object SaveLoadManager {
                 factionsObj.put(id, fObj)
             }
             root.put("factions", factionsObj)
+
+            // Diplomacy relations
+            val diplomacyObj = JSONObject()
+            for ((factionId, relations) in state.diplomacy) {
+                val relationsObj = JSONObject()
+                for ((targetId, relation) in relations) {
+                    relationsObj.put(targetId, JSONObject().apply {
+                        put("relation", relation.relation)
+                        put("trust", relation.trust)
+                        put("wars", relation.wars)
+                        put("status", relation.status.name)
+                    })
+                }
+                diplomacyObj.put(factionId, relationsObj)
+            }
+            root.put("diplomacy", diplomacyObj)
+
+            // Active wars
+            val warsArr = JSONArray()
+            for (war in state.activeWars) {
+                warsArr.put(JSONObject().apply {
+                    put("factionA", war.factionA)
+                    put("factionB", war.factionB)
+                    put("startTick", war.startTick)
+                    put("scoreA", war.scoreA)
+                    put("scoreB", war.scoreB)
+                })
+            }
+            root.put("activeWars", warsArr)
+
+            // Recent galactic events
+            val eventsArr = JSONArray()
+            for (event in state.events) {
+                eventsArr.put(JSONObject().apply {
+                    put("id", event.id)
+                    put("tick", event.tick)
+                    put("titleKey", event.titleKey)
+                    put("messageKey", event.messageKey)
+                    put("systemId", event.systemId ?: JSONObject.NULL)
+                    put("factionId", event.factionId ?: JSONObject.NULL)
+                    put("icon", event.icon)
+                    put("effectDesc", event.effectDesc)
+                })
+            }
+            root.put("events", eventsArr)
 
             // Fleets
             val fleetsArr = JSONArray()
@@ -143,10 +202,16 @@ object SaveLoadManager {
             }
             root.put("achievements", achArr)
 
-            val file = File(context.filesDir, SAVE_FILE_NAME)
-            file.writeText(root.toString(2), Charsets.UTF_8)
+            val stream = atomicFile.startWrite()
+            outputStream = stream
+            stream.write(root.toString(2).toByteArray(Charsets.UTF_8))
+            atomicFile.finishWrite(stream)
+            outputStream = null
             true
         } catch (e: Exception) {
+            outputStream?.let { stream ->
+                runCatching { atomicFile.failWrite(stream) }
+            }
             Log.e(TAG, "Failed to save game", e)
             false
         }
@@ -160,7 +225,7 @@ object SaveLoadManager {
         return try {
             val file = File(context.filesDir, SAVE_FILE_NAME)
             if (!file.exists()) return null
-            val jsonStr = file.readText(Charsets.UTF_8)
+            val jsonStr = AtomicFile(file).openRead().bufferedReader(Charsets.UTF_8).use { it.readText() }
             val root = JSONObject(jsonStr)
 
             val state = GameState(
@@ -203,6 +268,8 @@ object SaveLoadManager {
                         resources = sObj.optInt("resources", 100),
                         stock = sObj.optInt("stock", 50),
                         demand = sObj.optInt("demand", 50),
+                        value = sObj.optDouble("value", 0.0).toFloat(),
+                        description = sObj.optString("description", ""),
                         posX = sObj.optDouble("posX", 10.0).toFloat(),
                         posY = sObj.optDouble("posY", 10.0).toFloat(),
                         neighbors = neighborsList,
@@ -233,6 +300,14 @@ object SaveLoadManager {
                         losses = stObj?.optInt("losses", 0) ?: 0,
                         battles = stObj?.optInt("battles", 0) ?: 0
                     )
+                    val personalityObj = fObj.optJSONObject("personality")
+                    val personality = FactionPersonality(
+                        aggression = personalityObj?.optDouble("aggression", 0.5)?.toFloat() ?: 0.5f,
+                        economyFocus = personalityObj?.optDouble("economyFocus", 0.5)?.toFloat() ?: 0.5f,
+                        expansionFocus = personalityObj?.optDouble("expansionFocus", 0.5)?.toFloat() ?: 0.5f,
+                        defenseFocus = personalityObj?.optDouble("defenseFocus", 0.5)?.toFloat() ?: 0.5f,
+                        risk = personalityObj?.optDouble("risk", 0.5)?.toFloat() ?: 0.5f
+                    )
                     state.factions[key] = Faction(
                         id = fObj.getString("id"),
                         name = fObj.getString("name"),
@@ -243,7 +318,68 @@ object SaveLoadManager {
                         systems = systemsList,
                         tech = techList,
                         stats = stats,
+                        personality = personality,
                         strategy = fObj.optString("strategy", "balanced")
+                    )
+                }
+            }
+
+            // Diplomacy relations (optional for compatibility with older saves).
+            val diplomacyObj = root.optJSONObject("diplomacy")
+            if (diplomacyObj != null) {
+                for (factionId in diplomacyObj.keys()) {
+                    val relationsObj = diplomacyObj.optJSONObject(factionId) ?: continue
+                    val relations = mutableMapOf<String, DiplomacyRelation>()
+                    for (targetId in relationsObj.keys()) {
+                        val relationObj = relationsObj.optJSONObject(targetId) ?: continue
+                        val relationValue = relationObj.optInt("relation", 0)
+                        val status = RelationStatus.values().firstOrNull {
+                            it.name == relationObj.optString("status", "NEUTRAL")
+                        } ?: RelationStatus.fromRelation(relationValue)
+                        relations[targetId] = DiplomacyRelation(
+                            relation = relationValue,
+                            trust = relationObj.optInt("trust", 50),
+                            wars = relationObj.optInt("wars", 0),
+                            status = status
+                        )
+                    }
+                    state.diplomacy[factionId] = relations
+                }
+            }
+
+            // Active wars (optional for compatibility with older saves).
+            val warsArr = root.optJSONArray("activeWars")
+            if (warsArr != null) {
+                for (i in 0 until warsArr.length()) {
+                    val warObj = warsArr.getJSONObject(i)
+                    state.activeWars.add(
+                        ActiveWar(
+                            factionA = warObj.getString("factionA"),
+                            factionB = warObj.getString("factionB"),
+                            startTick = warObj.optInt("startTick", state.ticks),
+                            scoreA = warObj.optInt("scoreA", 0),
+                            scoreB = warObj.optInt("scoreB", 0)
+                        )
+                    )
+                }
+            }
+
+            // Recent galactic events (optional for compatibility with older saves).
+            val eventsArr = root.optJSONArray("events")
+            if (eventsArr != null) {
+                for (i in 0 until eventsArr.length()) {
+                    val eventObj = eventsArr.getJSONObject(i)
+                    state.events.add(
+                        GalacticEvent(
+                            id = eventObj.getString("id"),
+                            tick = eventObj.optInt("tick", state.ticks),
+                            titleKey = eventObj.optString("titleKey", ""),
+                            messageKey = eventObj.optString("messageKey", ""),
+                            systemId = if (eventObj.isNull("systemId")) null else eventObj.optString("systemId"),
+                            factionId = if (eventObj.isNull("factionId")) null else eventObj.optString("factionId"),
+                            icon = eventObj.optString("icon", "📡"),
+                            effectDesc = eventObj.optString("effectDesc", "")
+                        )
                     )
                 }
             }
