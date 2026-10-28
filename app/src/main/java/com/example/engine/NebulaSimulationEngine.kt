@@ -115,7 +115,7 @@ object NebulaSimulationEngine {
         }
     }
 
-    private fun processFleetMovement(state: GameState) {
+    internal fun processFleetMovement(state: GameState) {
         val fleetsToMove = state.fleets.filter { it.role == "attack" && it.owner != state.playerFactionId }
         for (fleet in fleetsToMove) {
             if (Random.nextFloat() > 0.4f) continue // movement interval
@@ -135,8 +135,11 @@ object NebulaSimulationEngine {
             val targetSys = state.systems[target]
             if (targetSys != null) {
                 val defenderFleets = state.fleets.filter { it.location == target && it.owner != fleet.owner }
-                if (defenderFleets.isEmpty() && targetSys.owner != fleet.owner) {
-                    // System conquered
+                if (defenderFleets.isEmpty() &&
+                    targetSys.owner != fleet.owner &&
+                    state.factions.containsKey(fleet.owner)
+                ) {
+                    // Only recognized factions can annex territory; neutral raiders cannot own systems.
                     val oldOwner = targetSys.owner
                     if (oldOwner != null) {
                         state.factions[oldOwner]?.systems?.remove(target)
