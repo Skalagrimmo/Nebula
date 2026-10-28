@@ -2,8 +2,7 @@ package com.example.model
 
 /**
  * A persistent hostile contact engaged by the player ship.
- * Lives in GameState while the fight is ongoing; intentionally not serialized
- * (an encounter never survives save/load).
+ * The full encounter state is serialized so an in-progress fight can resume after loading.
  */
 data class PirateEncounter(
     val id: String,
