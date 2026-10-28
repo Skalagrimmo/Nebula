@@ -616,7 +616,7 @@ object NebulaSimulationEngine {
         var message = "Hyperspace jump to $destinationId successful."
 
         // Contract progress on arrival
-        for (q in state.quests.filter { it.status == QuestStatus.ACTIVE && q.destination == destinationId }) {
+        for (q in state.quests.filter { it.status == QuestStatus.ACTIVE && it.destination == destinationId }) {
             when (q.type) {
                 QuestType.EXPLORE -> {
                     completeQuest(state, q, 15)
