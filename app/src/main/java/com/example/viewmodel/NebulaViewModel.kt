@@ -347,8 +347,10 @@ class NebulaViewModel : ViewModel() {
     }
 
     private fun publishState(state: GameState, markDirty: Boolean = true) {
-        _gameState.value = state.copy()
         stateRevision += 1
+        // GameState contains mutable maps/lists. A fresh UI revision prevents StateFlow's
+        // equality conflation from suppressing emissions after in-place engine mutations.
+        _gameState.value = state.copy(uiRevision = stateRevision)
         isDirty = markDirty
     }
 
