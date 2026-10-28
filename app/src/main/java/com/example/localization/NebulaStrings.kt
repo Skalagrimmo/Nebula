@@ -191,9 +191,9 @@ object NebulaStrings {
 
         // Victory
         "victory_title" to "ГАЛАКТИЧНА ПЕРЕМОГА!",
-        "victory_domination" to "Перемога пануванням (75% систем під контролем)",
-        "victory_economic" to "Економічна перемога (20,000 кредитів)",
-        "victory_military" to "Військовий тріумф (усі ворожі флоти знищено)",
+        "victory_domination" to "Панування (80% систем; перемога доступна від 2400-го ходу)",
+        "victory_economic" to "Економічна перемога (150 000 кредитів; від 2400-го ходу)",
+        "victory_military" to "Військова перемога (суперники втратили системи й флоти; від 2400-го ходу)",
         "btn_continue_sandbox" to "Продовжити гру (Пісочниця)",
         "btn_to_menu" to "Головне меню",
 
@@ -382,9 +382,9 @@ object NebulaStrings {
 
         // Victory
         "victory_title" to "GALACTIC VICTORY!",
-        "victory_domination" to "Domination Victory (75% galaxy under control)",
-        "victory_economic" to "Economic Victory (20,000 credits amassed)",
-        "victory_military" to "Military Victory (all rival armadas annihilated)",
+        "victory_domination" to "Domination (80% of systems; available from turn 2,400)",
+        "victory_economic" to "Economic Victory (150,000 credits; from turn 2,400)",
+        "victory_military" to "Military Victory (rivals lose all systems and fleets; from turn 2,400)",
         "btn_continue_sandbox" to "Continue in Sandbox Mode",
         "btn_to_menu" to "Main Menu",
 
