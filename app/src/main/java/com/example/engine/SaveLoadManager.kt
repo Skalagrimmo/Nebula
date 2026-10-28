@@ -69,6 +69,7 @@ object SaveLoadManager {
                     put("systems", JSONArray(fac.systems))
                     put("tech", JSONArray(fac.tech))
                     put("strategy", fac.strategy)
+                    put("lastExpansionTick", fac.lastExpansionTick)
                     val personalityObj = JSONObject().apply {
                         put("aggression", fac.personality.aggression.toDouble())
                         put("economyFocus", fac.personality.economyFocus.toDouble())
@@ -357,7 +358,8 @@ object SaveLoadManager {
                         tech = techList,
                         stats = stats,
                         personality = personality,
-                        strategy = fObj.optString("strategy", "balanced")
+                        strategy = fObj.optString("strategy", "balanced"),
+                        lastExpansionTick = fObj.optInt("lastExpansionTick", 0)
                     )
                 }
             }
