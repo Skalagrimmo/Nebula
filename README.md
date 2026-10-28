@@ -13,7 +13,7 @@ A galactic 4X space strategy & RPG game for Android, optimized for low-end devic
 
 ## 🛠 Збірка
 
-Вимоги: JDK 17+, Android SDK (compileSdk 37).
+Вимоги: JDK 21, Android SDK (compileSdk 37).
 
 ```bash
 # Gradle wrapper не входить до репозиторію — згенеруйте його один раз локально:
