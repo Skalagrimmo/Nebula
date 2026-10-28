@@ -168,6 +168,24 @@ object SaveLoadManager {
             }
             root.put("playerShip", shipObj)
 
+            // Preserve an in-progress RPG encounter across save/load.
+            val encounter = state.activeEncounter
+            if (encounter == null) {
+                root.put("activeEncounter", JSONObject.NULL)
+            } else {
+                root.put("activeEncounter", JSONObject().apply {
+                    put("id", encounter.id)
+                    put("enemyName", encounter.enemyName)
+                    put("enemyHp", encounter.enemyHp)
+                    put("enemyHpMax", encounter.enemyHpMax)
+                    put("enemyDamage", encounter.enemyDamage)
+                    put("bounty", encounter.bounty)
+                    put("salvageItem", encounter.salvageItem)
+                    put("salvageAmount", encounter.salvageAmount)
+                    put("questId", encounter.questId ?: JSONObject.NULL)
+                })
+            }
+
             // Quests
             val questsArr = JSONArray()
             for (q in state.quests) {
@@ -426,6 +444,22 @@ object SaveLoadManager {
                     kills = shipObj.optInt("kills", 0),
                     xp = shipObj.optInt("xp", 0),
                     level = shipObj.optInt("level", 1)
+                )
+            }
+
+            // Restore an in-progress RPG encounter when present (older saves omit it).
+            val encounterObj = root.optJSONObject("activeEncounter")
+            if (encounterObj != null) {
+                state.activeEncounter = PirateEncounter(
+                    id = encounterObj.getString("id"),
+                    enemyName = encounterObj.getString("enemyName"),
+                    enemyHp = encounterObj.optInt("enemyHp", 0),
+                    enemyHpMax = encounterObj.optInt("enemyHpMax", 1),
+                    enemyDamage = encounterObj.optInt("enemyDamage", 0),
+                    bounty = encounterObj.optInt("bounty", 0),
+                    salvageItem = encounterObj.optString("salvageItem", "ore"),
+                    salvageAmount = encounterObj.optInt("salvageAmount", 0),
+                    questId = if (encounterObj.isNull("questId")) null else encounterObj.optString("questId")
                 )
             }
 
