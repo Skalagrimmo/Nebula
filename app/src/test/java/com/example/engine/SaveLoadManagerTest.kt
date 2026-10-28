@@ -71,7 +71,9 @@ class SaveLoadManagerTest {
                 factionB = "zergon",
                 startTick = 17,
                 scoreA = 8,
-                scoreB = 3
+                scoreB = 3,
+                exhaustionA = 33,
+                exhaustionB = 47
             )
         )
         state.events.clear()
@@ -132,6 +134,8 @@ class SaveLoadManagerTest {
         assertEquals(17, restored.activeWars.single().startTick)
         assertEquals(8, restored.activeWars.single().scoreA)
         assertEquals(3, restored.activeWars.single().scoreB)
+        assertEquals(33, restored.activeWars.single().exhaustionA)
+        assertEquals(47, restored.activeWars.single().exhaustionB)
 
         val event = restored.events.single()
         assertEquals("test-supernova", event.id)
@@ -153,6 +157,36 @@ class SaveLoadManagerTest {
         assertEquals("ore", encounter.salvageItem)
         assertEquals(2, encounter.salvageAmount)
         assertEquals("quest-test", encounter.questId)
+    }
+
+    @Test
+    fun `older active war entries without exhaustion fields still load`() {
+        clearSaveFiles()
+        val state = GalaxyGenerator.createInitialState(mode = "strategy")
+        state.activeWars.add(
+            ActiveWar(
+                factionA = "solarian",
+                factionB = "zergon",
+                startTick = 14,
+                scoreA = 2,
+                scoreB = 1
+            )
+        )
+        assertTrue(SaveLoadManager.saveGame(context, state))
+
+        val file = File(context.filesDir, "savegame.json")
+        val root = JSONObject(file.readText(Charsets.UTF_8))
+        val war = root.getJSONArray("activeWars").getJSONObject(0)
+        war.remove("exhaustionA")
+        war.remove("exhaustionB")
+        file.writeText(root.toString(), Charsets.UTF_8)
+
+        val restored = requireNotNull(SaveLoadManager.loadGame(context))
+        val warAfterLoad = restored.activeWars.single()
+        assertEquals(2, warAfterLoad.scoreA)
+        assertEquals(1, warAfterLoad.scoreB)
+        assertEquals(0, warAfterLoad.exhaustionA)
+        assertEquals(0, warAfterLoad.exhaustionB)
     }
 
     @Test

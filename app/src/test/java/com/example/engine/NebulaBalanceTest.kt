@@ -290,6 +290,87 @@ class NebulaBalanceTest {
     }
 
     @Test
+    fun `war exhaustion rises with time and battle outcomes`() {
+        val state = GalaxyGenerator.createInitialState()
+        NebulaSimulationEngine.declareWar(state, "zergon")
+        val war = state.activeWars.single()
+
+        state.ticks = 60
+        NebulaSimulationEngine.processWarExhaustion(state)
+        assertEquals(1, war.exhaustionA)
+        assertEquals(1, war.exhaustionB)
+
+        val playerFleet = state.fleets.first { it.owner == "solarian" }
+        val zergonFleet = state.fleets.first { it.owner == "zergon" }
+        NebulaSimulationEngine.resolveFleetClash(state, playerFleet, zergonFleet)
+
+        assertEquals(1, war.scoreA + war.scoreB)
+        assertTrue("battle winner and loser must both gain war exhaustion",
+            war.exhaustionA >= 5 && war.exhaustionB >= 5)
+        assertTrue("battle losses should create substantial exhaustion",
+            war.exhaustionA + war.exhaustionB >= 23)
+    }
+
+    @Test
+    fun `AI automatically seeks armistice when its war exhaustion is high`() {
+        val state = GalaxyGenerator.createInitialState()
+        NebulaSimulationEngine.declareWar(state, "zergon")
+        val war = state.activeWars.single()
+        war.exhaustionB = 80
+        state.ticks = 20
+
+        NebulaSimulationEngine.processAIDiplomacy(state)
+
+        assertTrue(state.activeWars.isEmpty())
+        assertTrue(state.events.any { it.titleKey == "War Exhaustion" })
+        assertTrue(!NebulaSimulationEngine.isAtWar(state, "solarian", "zergon"))
+    }
+
+    @Test
+    fun `territorial peace requires leverage and transfers a non-capital system`() {
+        val state = GalaxyGenerator.createInitialState()
+        val zergon = state.factions.getValue("zergon")
+        val player = state.factions.getValue("solarian")
+        state.systems.getValue("Vega").owner = "zergon"
+        zergon.systems.add("Vega")
+        NebulaSimulationEngine.declareWar(state, "zergon")
+        val war = state.activeWars.single()
+        assertTrue(!NebulaSimulationEngine.canDemandConcession(state, "zergon"))
+
+        val rejected = NebulaSimulationEngine.proposePeace(state, "zergon", "Vega")
+        assertTrue(rejected.contains("Insufficient leverage"))
+        assertEquals("zergon", state.systems.getValue("Vega").owner)
+
+        war.scoreA = 2
+        assertTrue(NebulaSimulationEngine.canDemandConcession(state, "zergon"))
+        val accepted = NebulaSimulationEngine.proposePeace(state, "zergon", "Vega")
+
+        assertTrue(accepted.contains("Vega"))
+        assertEquals("solarian", state.systems.getValue("Vega").owner)
+        assertTrue(player.systems.contains("Vega"))
+        assertTrue(!zergon.systems.contains("Vega"))
+        assertTrue(state.activeWars.isEmpty())
+        assertTrue(state.events.any { it.titleKey == "Territorial Concession" })
+    }
+
+    @Test
+    fun `territorial peace cannot take a capital or the final enemy system`() {
+        val state = GalaxyGenerator.createInitialState()
+        NebulaSimulationEngine.declareWar(state, "zergon")
+        val capitalResult = NebulaSimulationEngine.proposePeace(state, "zergon", "Epsilon")
+        assertTrue(capitalResult.contains("capital"))
+        assertTrue(NebulaSimulationEngine.isAtWar(state, "solarian", "zergon"))
+
+        state.systems.getValue("Vega").owner = "zergon"
+        state.factions.getValue("zergon").systems.add("Vega")
+        state.factions.getValue("zergon").systems.remove("Epsilon")
+        state.systems.getValue("Epsilon").owner = null
+        val lastSystemResult = NebulaSimulationEngine.proposePeace(state, "zergon", "Vega")
+        assertTrue(lastSystemResult.contains("last system"))
+        assertTrue(NebulaSimulationEngine.isAtWar(state, "solarian", "zergon"))
+    }
+
+    @Test
     fun `pirate fleets can still fight rival fleets outside formal diplomacy`() {
         val state = GameState(
             ticks = 1,

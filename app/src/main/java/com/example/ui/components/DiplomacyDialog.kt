@@ -28,11 +28,13 @@ fun DiplomacyDialog(
     lang: GameLanguage,
     onDismiss: () -> Unit,
     onProposePeace: (String) -> String,
+    onDemandConcession: (String, String) -> String,
     onDeclareWar: (String) -> String,
     onSpyAction: (String) -> String
 ) {
     var feedbackMessage by remember { mutableStateOf<String?>(null) }
     var confirmWarAgainst by remember { mutableStateOf<String?>(null) }
+    var demandConcessionAgainst by remember { mutableStateOf<String?>(null) }
     val playerFactionId = gameState.playerFactionId
     val otherFactions = gameState.factions.values.filter { it.id != playerFactionId }
 
@@ -198,12 +200,45 @@ fun DiplomacyDialog(
                                         Text(NebulaStrings.get("declare_war", lang), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     }
                                 } else {
+                                    val playerIsA = activeWar.factionA == playerFactionId
+                                    val playerScore = if (playerIsA) activeWar.scoreA else activeWar.scoreB
+                                    val opponentScore = if (playerIsA) activeWar.scoreB else activeWar.scoreA
+                                    val opponentExhaustion = if (playerIsA) activeWar.exhaustionB else activeWar.exhaustionA
+                                    val hasLeverage = playerScore >= opponentScore + 2 || opponentExhaustion >= 60
+                                    val concessionSystems = if (faction.systems.size > 1) {
+                                        gameState.systems.values.filter { it.owner == faction.id && !it.capital }
+                                    } else emptyList()
+
                                     Text(
                                         text = "${NebulaStrings.get("war_active", lang)} · ${activeWar.scoreA} : ${activeWar.scoreB}",
                                         color = LaserRed,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold
                                     )
+                                    Text(
+                                        text = "${NebulaStrings.get("war_exhaustion", lang)}: ${activeWar.exhaustionA}% / ${activeWar.exhaustionB}%",
+                                        color = TextSecondary,
+                                        fontSize = 10.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                    if (hasLeverage && concessionSystems.isNotEmpty()) {
+                                        OutlinedButton(
+                                            onClick = { demandConcessionAgainst = faction.id },
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = StellarGold),
+                                            border = BorderStroke(1.dp, StellarGold.copy(alpha = 0.7f)),
+                                            shape = RoundedCornerShape(6.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp),
+                                            modifier = Modifier.fillMaxWidth().height(32.dp)
+                                        ) {
+                                            Text(NebulaStrings.get("demand_terms", lang), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    } else if (!hasLeverage) {
+                                        Text(
+                                            NebulaStrings.get("concession_need_leverage", lang),
+                                            color = TextMuted,
+                                            fontSize = 10.sp
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -234,6 +269,66 @@ fun DiplomacyDialog(
             },
             dismissButton = {
                 TextButton(onClick = { confirmWarAgainst = null }) {
+                    Text(NebulaStrings.get("menu_back", lang), color = TacticalCyan)
+                }
+            },
+            containerColor = SpaceDark,
+            shape = RoundedCornerShape(14.dp)
+        )
+    }
+
+    val concessionTargetId = demandConcessionAgainst
+    val concessionTarget = concessionTargetId?.let { gameState.factions[it] }
+    val concessionSystems = if (concessionTargetId != null && (concessionTarget?.systems?.size ?: 0) > 1) {
+        gameState.systems.values.filter { it.owner == concessionTargetId && !it.capital }
+    } else emptyList()
+    if (concessionTargetId != null && concessionTarget != null) {
+        AlertDialog(
+            onDismissRequest = { demandConcessionAgainst = null },
+            title = {
+                Text(NebulaStrings.get("demand_terms", lang), color = StellarGold, fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column {
+                    Text(
+                        "${NebulaStrings.get("choose_concession", lang)} ${concessionTarget.name}:",
+                        color = TextPrimary,
+                        fontSize = 12.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(concessionSystems, key = { it.id }) { system ->
+                            OutlinedButton(
+                                onClick = {
+                                    feedbackMessage = onDemandConcession(concessionTargetId, system.id)
+                                    demandConcessionAgainst = null
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Text(system.id, color = StellarGold, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        system.description,
+                                        color = TextSecondary,
+                                        fontSize = 10.sp,
+                                        maxLines = 2
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (concessionSystems.isEmpty()) {
+                        Text(NebulaStrings.get("no_concession_systems", lang), color = TextSecondary, fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { demandConcessionAgainst = null }) {
                     Text(NebulaStrings.get("menu_back", lang), color = TacticalCyan)
                 }
             },

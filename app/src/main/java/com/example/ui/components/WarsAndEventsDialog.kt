@@ -101,6 +101,12 @@ fun WarsAndEventsDialog(
                                     color = TextSecondary,
                                     fontSize = 10.sp
                                 )
+                                Text(
+                                    text = "${factionA}: ${war.exhaustionA}% · ${factionB}: ${war.exhaustionB}%",
+                                    color = TextSecondary,
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
                             }
                         }
                     }

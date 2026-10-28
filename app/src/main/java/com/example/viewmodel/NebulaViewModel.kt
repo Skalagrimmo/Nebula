@@ -241,6 +241,13 @@ class NebulaViewModel : ViewModel() {
         return res
     }
 
+    fun demandPeaceConcession(targetFactionId: String, systemId: String): String {
+        val curr = _gameState.value
+        val res = NebulaSimulationEngine.proposePeace(curr, targetFactionId, systemId)
+        publishState(curr)
+        return res
+    }
+
     fun declareWar(targetFactionId: String): String {
         val curr = _gameState.value
         val res = NebulaSimulationEngine.declareWar(curr, targetFactionId)

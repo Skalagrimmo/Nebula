@@ -5,7 +5,9 @@ data class ActiveWar(
     val factionB: String,
     val startTick: Int,
     var scoreA: Int = 0,
-    var scoreB: Int = 0
+    var scoreB: Int = 0,
+    var exhaustionA: Int = 0,
+    var exhaustionB: Int = 0
 )
 
 data class GameState(

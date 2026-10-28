@@ -114,6 +114,8 @@ object SaveLoadManager {
                     put("startTick", war.startTick)
                     put("scoreA", war.scoreA)
                     put("scoreB", war.scoreB)
+                    put("exhaustionA", war.exhaustionA)
+                    put("exhaustionB", war.exhaustionB)
                 })
             }
             root.put("activeWars", warsArr)
@@ -398,7 +400,9 @@ object SaveLoadManager {
                             factionB = warObj.getString("factionB"),
                             startTick = warObj.optInt("startTick", state.ticks),
                             scoreA = warObj.optInt("scoreA", 0),
-                            scoreB = warObj.optInt("scoreB", 0)
+                            scoreB = warObj.optInt("scoreB", 0),
+                            exhaustionA = warObj.optInt("exhaustionA", 0),
+                            exhaustionB = warObj.optInt("exhaustionB", 0)
                         )
                     )
                 }
