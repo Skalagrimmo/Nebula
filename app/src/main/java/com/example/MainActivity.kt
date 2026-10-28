@@ -22,6 +22,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.localization.GameLanguage
@@ -50,6 +53,7 @@ fun NebulaGameApp(
     viewModel: NebulaViewModel = viewModel()
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val gameState by viewModel.gameState.collectAsStateWithLifecycle()
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
     val tickSpeedMs by viewModel.tickSpeedMs.collectAsStateWithLifecycle()
@@ -58,6 +62,21 @@ fun NebulaGameApp(
     val activeDialog by viewModel.activeDialog.collectAsStateWithLifecycle()
     val saveFeedback by viewModel.saveFeedback.collectAsStateWithLifecycle()
     val rpgMessage by viewModel.rpgMessage.collectAsStateWithLifecycle()
+
+    LaunchedEffect(context, viewModel) {
+        viewModel.attachContext(context.applicationContext)
+    }
+
+    DisposableEffect(lifecycleOwner, context, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                // Persist a final checkpoint when the app leaves the foreground.
+                viewModel.saveGame(context.applicationContext, showFeedback = false, force = true)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     var showMainMenu by remember { mutableStateOf(false) }
     var showFactionSelect by remember { mutableStateOf(false) }
