@@ -329,7 +329,7 @@ object NebulaSimulationEngine {
     internal fun checkVictory(state: GameState) {
         // A campaign must have room for economic development, research and territorial wars.
         // This is measured in simulation turns, so the player's chosen game speed still applies.
-        if (state.victoryAchieved || state.sandboxMode || state.ticks < MIN_VICTORY_TICKS) return
+        if (state.victoryAchieved || state.sandboxMode || state.mode != "strategy" || state.ticks < MIN_VICTORY_TICKS) return
 
         val totalSystems = state.systems.size
         if (totalSystems <= 0) return
