@@ -1,6 +1,7 @@
 package com.example.engine
 
 import android.content.Context
+import android.util.Log
 import com.example.model.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -9,6 +10,7 @@ import java.io.File
 object SaveLoadManager {
 
     private const val SAVE_FILE_NAME = "savegame.json"
+    private const val TAG = "SaveLoadManager"
 
     fun saveGame(context: Context, state: GameState): Boolean {
         return try {
@@ -121,7 +123,7 @@ object SaveLoadManager {
             file.writeText(root.toString(2), Charsets.UTF_8)
             true
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "Failed to save game", e)
             false
         }
     }
@@ -283,7 +285,7 @@ object SaveLoadManager {
 
             state
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "Failed to load game", e)
             null
         }
     }

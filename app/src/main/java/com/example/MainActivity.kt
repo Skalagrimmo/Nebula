@@ -136,7 +136,7 @@ fun NebulaGameApp(
                     containerColor = SpaceCardBg,
                     contentColor = TextPrimary
                 ) {
-                    Text(saveFeedback!!)
+                    Text(saveFeedback ?: "")
                 }
             }
         }
@@ -175,9 +175,10 @@ fun NebulaGameApp(
     // --- Dialogs & Overlays ---
 
     // 1. System Inspector
-    if (activeDialog == "inspector" && selectedSystem != null) {
+    val inspectorSystem = selectedSystem
+    if (activeDialog == "inspector" && inspectorSystem != null) {
         SystemInspectorDialog(
-            system = selectedSystem!!,
+            system = inspectorSystem,
             gameState = gameState,
             lang = currentLang,
             onDismiss = { viewModel.dismissDialog() },
@@ -195,16 +196,18 @@ fun NebulaGameApp(
     }
 
     // 2. Fleet Builder
-    if (activeDialog == "build" && selectedBuildSystem != null) {
-        FleetBuilderDialog(
-            system = selectedBuildSystem!!,
-            gameState = gameState,
-            lang = currentLang,
-            onDismiss = { viewModel.dismissDialog() },
-            onBuild = { type ->
-                viewModel.buildFleet(selectedBuildSystem!!.id, type)
-            }
-        )
+    if (activeDialog == "build") {
+        selectedBuildSystem?.let { buildSystem ->
+            FleetBuilderDialog(
+                system = buildSystem,
+                gameState = gameState,
+                lang = currentLang,
+                onDismiss = { viewModel.dismissDialog() },
+                onBuild = { type ->
+                    viewModel.buildFleet(buildSystem.id, type)
+                }
+            )
+        }
     }
 
     // 3. Tech Tree

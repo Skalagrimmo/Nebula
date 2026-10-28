@@ -8,6 +8,7 @@ import com.example.engine.NebulaSimulationEngine
 import com.example.engine.SaveLoadManager
 import com.example.localization.GameLanguage
 import com.example.model.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class NebulaViewModel : ViewModel() {
 
@@ -54,21 +56,29 @@ class NebulaViewModel : ViewModel() {
     }
 
     fun loadGame(context: Context) {
-        val loaded = SaveLoadManager.loadGame(context)
-        if (loaded != null) {
-            stopTicker()
-            _gameState.value = loaded
-            _selectedSystem.value = loaded.systems[loaded.playerShip.location] ?: loaded.systems.values.firstOrNull()
-            _activeDialog.value = null
-            _saveFeedback.value = "Game loaded successfully."
-        } else {
-            _saveFeedback.value = "No saved game found."
+        viewModelScope.launch {
+            // File I/O stays off the main thread; applicationContext avoids leaking the Activity.
+            val appContext = context.applicationContext
+            val loaded = withContext(Dispatchers.IO) { SaveLoadManager.loadGame(appContext) }
+            if (loaded != null) {
+                stopTicker()
+                _gameState.value = loaded
+                _selectedSystem.value = loaded.systems[loaded.playerShip.location] ?: loaded.systems.values.firstOrNull()
+                _activeDialog.value = null
+                _saveFeedback.value = "Game loaded successfully."
+            } else {
+                _saveFeedback.value = "No saved game found."
+            }
         }
     }
 
     fun saveGame(context: Context) {
-        val ok = SaveLoadManager.saveGame(context, _gameState.value)
-        _saveFeedback.value = if (ok) "Game saved (Sector Stardate ${String.format("%.1f", _gameState.value.stardate)})" else "Save failed."
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                SaveLoadManager.saveGame(context.applicationContext, _gameState.value)
+            }
+            _saveFeedback.value = if (ok) "Game saved (Sector Stardate ${String.format("%.1f", _gameState.value.stardate)})" else "Save failed."
+        }
     }
 
     fun hasSaveGame(context: Context): Boolean {
@@ -79,12 +89,12 @@ class NebulaViewModel : ViewModel() {
         if (_isPlaying.value) {
             stopTicker()
         } else {
-            startTicker(context)
+            startTicker(context?.applicationContext)
         }
     }
 
     fun stepTick(context: Context? = null) {
-        executeTick(context)
+        viewModelScope.launch { executeTick(context?.applicationContext) }
     }
 
     fun cycleSpeed() {
@@ -231,11 +241,17 @@ class NebulaViewModel : ViewModel() {
         tickerJob = null
     }
 
-    private fun executeTick(context: Context?) {
+    /**
+     * One simulation turn. Engine mutations stay confined to the main dispatcher
+     * (single-threaded state ownership); only blocking file I/O hops to Dispatchers.IO.
+     */
+    private suspend fun executeTick(context: Context?) {
         val curr = _gameState.value
         NebulaSimulationEngine.step(curr)
         if (context != null && curr.ticks % 50 == 0) {
-            SaveLoadManager.saveGame(context, curr)
+            withContext(Dispatchers.IO) {
+                SaveLoadManager.saveGame(context, curr)
+            }
         }
         _gameState.value = curr.copy()
     }
