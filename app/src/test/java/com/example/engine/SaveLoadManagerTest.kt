@@ -48,6 +48,7 @@ class SaveLoadManagerTest {
         sol.description = "Industrial capital"
 
         val faction = state.factions.getValue("solarian")
+        faction.lastExpansionTick = 17
         faction.personality.aggression = 0.91f
         faction.personality.economyFocus = 0.73f
         faction.personality.expansionFocus = 0.64f
@@ -109,6 +110,8 @@ class SaveLoadManagerTest {
         assertEquals(3002.9f, restored.stardate, 0.001f)
         assertEquals(12.75f, restored.systems.getValue("Sol").value, 0.001f)
         assertEquals("Industrial capital", restored.systems.getValue("Sol").description)
+
+        assertEquals(17, restored.factions.getValue("solarian").lastExpansionTick)
 
         val restoredPersonality = restored.factions.getValue("solarian").personality
         assertEquals(0.91f, restoredPersonality.aggression, 0.001f)
@@ -177,6 +180,7 @@ class SaveLoadManagerTest {
         val factionKeys = factions.keys()
         while (factionKeys.hasNext()) {
             factions.getJSONObject(factionKeys.next()).remove("personality")
+            factions.getJSONObject(factionKeys.next()).remove("lastExpansionTick")
         }
         file.writeText(root.toString(), Charsets.UTF_8)
 
@@ -189,5 +193,6 @@ class SaveLoadManagerTest {
         assertEquals(0f, restored.systems.getValue("Sol").value, 0f)
         assertEquals("", restored.systems.getValue("Sol").description)
         assertEquals(0.5f, restored.factions.getValue("solarian").personality.aggression, 0f)
+        assertEquals(0, restored.factions.getValue("solarian").lastExpansionTick)
     }
 }
