@@ -114,6 +114,13 @@ object GalaxyGenerator {
             credits = 250,
             military = 1.2f,
             systems = mutableListOf("Sol"),
+            personality = FactionPersonality(
+                aggression = 0.45f,
+                economyFocus = 0.65f,
+                expansionFocus = 0.45f,
+                defenseFocus = 0.70f,
+                risk = 0.35f
+            ),
             strategy = "balanced"
         )
         val zergon = Faction(
@@ -124,6 +131,13 @@ object GalaxyGenerator {
             credits = 200,
             military = 1.3f,
             systems = mutableListOf("Epsilon"),
+            personality = FactionPersonality(
+                aggression = 0.85f,
+                economyFocus = 0.25f,
+                expansionFocus = 0.85f,
+                defenseFocus = 0.35f,
+                risk = 0.80f
+            ),
             strategy = "aggressive"
         )
         val federation = Faction(
@@ -134,6 +148,13 @@ object GalaxyGenerator {
             credits = 300,
             military = 1.0f,
             systems = mutableListOf("Alpha"),
+            personality = FactionPersonality(
+                aggression = 0.35f,
+                economyFocus = 0.85f,
+                expansionFocus = 0.40f,
+                defenseFocus = 0.70f,
+                risk = 0.25f
+            ),
             strategy = "economic"
         )
 
