@@ -28,9 +28,11 @@ fun DiplomacyDialog(
     lang: GameLanguage,
     onDismiss: () -> Unit,
     onProposePeace: (String) -> String,
+    onDeclareWar: (String) -> String,
     onSpyAction: (String) -> String
 ) {
     var feedbackMessage by remember { mutableStateOf<String?>(null) }
+    var confirmWarAgainst by remember { mutableStateOf<String?>(null) }
     val playerFactionId = gameState.playerFactionId
     val otherFactions = gameState.factions.values.filter { it.id != playerFactionId }
 
@@ -83,6 +85,10 @@ fun DiplomacyDialog(
                 ) {
                     items(otherFactions) { faction ->
                         val rel = gameState.diplomacy[playerFactionId]?.get(faction.id)
+                        val activeWar = gameState.activeWars.firstOrNull {
+                            (it.factionA == playerFactionId && it.factionB == faction.id) ||
+                                (it.factionA == faction.id && it.factionB == playerFactionId)
+                        }
                         val status = rel?.status ?: RelationStatus.NEUTRAL
                         val statusColor = when (status) {
                             RelationStatus.ALLY -> ShieldGreen
@@ -178,6 +184,27 @@ fun DiplomacyDialog(
                                         Text(NebulaStrings.get("spy_action", lang), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+                                if (activeWar == null) {
+                                    OutlinedButton(
+                                        onClick = { confirmWarAgainst = faction.id },
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = LaserRed),
+                                        border = BorderStroke(1.dp, LaserRed.copy(alpha = 0.7f)),
+                                        shape = RoundedCornerShape(6.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp),
+                                        modifier = Modifier.fillMaxWidth().height(32.dp)
+                                    ) {
+                                        Text(NebulaStrings.get("declare_war", lang), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                } else {
+                                    Text(
+                                        text = "${NebulaStrings.get("war_active", lang)} · ${activeWar.scoreA} : ${activeWar.scoreB}",
+                                        color = LaserRed,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }
@@ -187,4 +214,31 @@ fun DiplomacyDialog(
         containerColor = SpaceDark,
         shape = RoundedCornerShape(14.dp)
     )
+
+    val targetId = confirmWarAgainst
+    val targetFaction = targetId?.let { gameState.factions[it] }
+    if (targetId != null && targetFaction != null) {
+        AlertDialog(
+            onDismissRequest = { confirmWarAgainst = null },
+            title = {
+                Text(NebulaStrings.get("confirm_declare_war", lang), color = LaserRed, fontWeight = FontWeight.Bold)
+            },
+            text = { Text("${NebulaStrings.get("confirm_war", lang)} ${targetFaction.name}?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    feedbackMessage = onDeclareWar(targetId)
+                    confirmWarAgainst = null
+                }) {
+                    Text(NebulaStrings.get("declare_war", lang), color = LaserRed)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmWarAgainst = null }) {
+                    Text(NebulaStrings.get("menu_back", lang), color = TacticalCyan)
+                }
+            },
+            containerColor = SpaceDark,
+            shape = RoundedCornerShape(14.dp)
+        )
+    }
 }

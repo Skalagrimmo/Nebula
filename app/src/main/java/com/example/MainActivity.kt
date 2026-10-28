@@ -256,6 +256,9 @@ fun NebulaGameApp(
             onProposePeace = { targetId ->
                 viewModel.proposePeace(targetId)
             },
+            onDeclareWar = { targetId ->
+                viewModel.declareWar(targetId)
+            },
             onSpyAction = { targetId ->
                 viewModel.spyAction(targetId)
             }

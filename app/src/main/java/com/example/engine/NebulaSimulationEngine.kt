@@ -15,6 +15,8 @@ object NebulaSimulationEngine {
     // At the default 1-second tick, AI factions can annex at most one system every 2 minutes.
     private const val AI_CONQUEST_COOLDOWN_TICKS = 120
     private const val AI_FLEET_MOVE_CHANCE = 0.25f
+    private const val AI_DIPLOMACY_INTERVAL_TICKS = 20
+    private const val BORDER_TENSION_PENALTY = 8
 
     // 2,400 turns is 40 minutes at the default 1-second tick interval.
     private const val MIN_VICTORY_TICKS = 2_400
@@ -34,6 +36,7 @@ object NebulaSimulationEngine {
 
         // 2. AI Faction Actions (Fleet construction, Tech research, Diplomacy)
         processAIActions(state)
+        processAIDiplomacy(state)
 
         // 3. Fleet Movement & Tactical Clashes
         processFleetMovement(state)
@@ -131,6 +134,114 @@ object NebulaSimulationEngine {
         }
     }
 
+    /**
+     * Aggressive factions can turn severe border disputes into open war.
+     * Defensive factions require a more extreme relationship breakdown before initiating.
+     */
+    internal fun processAIDiplomacy(state: GameState) {
+        if (state.mode != "strategy" || state.ticks % AI_DIPLOMACY_INTERVAL_TICKS != 0) return
+
+        for (faction in state.factions.values) {
+            if (faction.id == state.playerFactionId || faction.systems.isEmpty()) continue
+            if (state.activeWars.any { it.factionA == faction.id || it.factionB == faction.id }) continue
+
+            val hostilityThreshold = if (faction.personality.aggression > 0.6f) -60 else -80
+            val target = state.factions.values
+                .asSequence()
+                .filter { it.id != faction.id && it.systems.isNotEmpty() }
+                .filterNot { isAtWar(state, faction.id, it.id) }
+                .mapNotNull { other ->
+                    val relation = state.diplomacy[faction.id]?.get(other.id) ?: return@mapNotNull null
+                    if (relation.relation <= hostilityThreshold) other to relation.relation else null
+                }
+                .sortedBy { it.second }
+                .map { it.first }
+                .firstOrNull()
+
+            if (target != null) startWar(state, faction.id, target.id)
+        }
+    }
+
+    fun declareWar(state: GameState, targetFactionId: String): String {
+        if (state.mode != "strategy") return "War declarations are only available in strategy mode."
+        val attackerId = state.playerFactionId
+        if (attackerId == targetFactionId) return "A faction cannot declare war on itself."
+        val target = state.factions[targetFactionId] ?: return "Target faction unavailable."
+        val attacker = state.factions[attackerId] ?: return "Player faction unavailable."
+        if (attacker.systems.isEmpty() || target.systems.isEmpty()) return "An eliminated faction cannot be targeted."
+        if (isAtWar(state, attackerId, targetFactionId)) return "War is already active with ${target.name}."
+
+        startWar(state, attackerId, targetFactionId)
+        return "War declared on ${target.name}. Enemy systems are now valid military targets."
+    }
+
+    internal fun isAtWar(state: GameState, factionA: String, factionB: String): Boolean =
+        state.activeWars.any {
+            (it.factionA == factionA && it.factionB == factionB) ||
+                (it.factionA == factionB && it.factionB == factionA)
+        }
+
+    private fun startWar(state: GameState, factionA: String, factionB: String) {
+        if (isAtWar(state, factionA, factionB)) return
+        val nameA = state.factions[factionA]?.name ?: factionA
+        val nameB = state.factions[factionB]?.name ?: factionB
+        state.activeWars.add(ActiveWar(factionA = factionA, factionB = factionB, startTick = state.ticks))
+        adjustRelations(state, factionA, factionB, relationDelta = -40, trustDelta = -20, warCountDelta = 1, forceHostile = true)
+        state.events.add(
+            0,
+            GalacticEvent(
+                id = "war_${state.ticks}_${factionA}_${factionB}",
+                tick = state.ticks,
+                titleKey = "War Declared",
+                messageKey = "$nameA declared war on $nameB.",
+                factionId = factionA,
+                icon = "⚔️"
+            )
+        )
+    }
+
+    private fun adjustRelations(
+        state: GameState,
+        factionA: String,
+        factionB: String,
+        relationDelta: Int,
+        trustDelta: Int,
+        warCountDelta: Int = 0,
+        forceHostile: Boolean = false
+    ) {
+        val relationA = state.diplomacy.getOrPut(factionA) { mutableMapOf() }
+            .getOrPut(factionB) { DiplomacyRelation() }
+        val relationB = state.diplomacy.getOrPut(factionB) { mutableMapOf() }
+            .getOrPut(factionA) { DiplomacyRelation() }
+        val baselineRelation = minOf(relationA.relation, relationB.relation)
+        val nextRelation = (baselineRelation + relationDelta)
+            .coerceIn(-100, 100)
+            .let { if (forceHostile) minOf(it, -65) else it }
+        val nextTrust = (minOf(relationA.trust, relationB.trust) + trustDelta).coerceIn(0, 100)
+        for (relation in listOf(relationA, relationB)) {
+            relation.relation = nextRelation
+            relation.trust = nextTrust
+            relation.wars = (relation.wars + warCountDelta).coerceAtLeast(0)
+            relation.status = RelationStatus.fromRelation(nextRelation)
+        }
+    }
+
+    private fun applyBorderTension(state: GameState, factionId: String, system: StarSystem) {
+        val neighboringRivals = system.neighbors
+            .mapNotNull { state.systems[it]?.owner }
+            .filter { it != factionId }
+            .distinct()
+        for (rivalId in neighboringRivals) {
+            if (state.factions.containsKey(rivalId) && !isAtWar(state, factionId, rivalId)) {
+                adjustRelations(
+                    state, factionId, rivalId,
+                    relationDelta = -BORDER_TENSION_PENALTY,
+                    trustDelta = -2
+                )
+            }
+        }
+    }
+
     internal fun processFleetMovement(state: GameState) {
         val fleetsToMove = state.fleets.filter { it.role == "attack" && it.owner != state.playerFactionId }
         for (fleet in fleetsToMove) {
@@ -139,7 +250,7 @@ object NebulaSimulationEngine {
 
             // An AI fleet that reaches an unguarded neutral/enemy system occupies it.
             // It holds the position until its faction's expansion cooldown expires.
-            if (faction != null && currentSys.owner != fleet.owner) {
+            if (faction != null && currentSys.owner != fleet.owner && canConquerSystem(state, fleet.owner, currentSys.owner)) {
                 val currentDefenders = state.fleets.filter {
                     it.location == currentSys.id && it.owner != fleet.owner
                 }
@@ -155,12 +266,16 @@ object NebulaSimulationEngine {
             val neighbors = currentSys.neighbors
             if (neighbors.isEmpty()) continue
 
-            // Prefer neutral or enemy territory when available.
+            // Neutral systems are open for expansion; rival territory requires a declared war.
             val targets = neighbors.filter { nId ->
-                val nSys = state.systems[nId]
-                nSys != null && nSys.owner != fleet.owner
+                val nSys = state.systems[nId] ?: return@filter false
+                nSys.owner == null || (nSys.owner != fleet.owner && isAtWar(state, fleet.owner, nSys.owner!!))
             }
-            val target = if (targets.isNotEmpty()) targets.random() else neighbors.random()
+            val safeFallbacks = neighbors.filter { nId ->
+                val owner = state.systems[nId]?.owner
+                owner == null || owner == fleet.owner
+            }
+            val target = (targets.ifEmpty { safeFallbacks }).randomOrNull() ?: continue
             fleet.location = target
 
             val targetSys = state.systems[target]
@@ -168,20 +283,24 @@ object NebulaSimulationEngine {
                 val defenderFleets = state.fleets.filter { it.location == target && it.owner != fleet.owner }
                 if (defenderFleets.isEmpty() &&
                     targetSys.owner != fleet.owner &&
-                    faction != null
+                    faction != null &&
+                    canConquerSystem(state, fleet.owner, targetSys.owner)
                 ) {
-                    // If the cooldown is not ready, the fleet stays in this system and
-                    // annexes it later rather than skipping past it to chain-capture others.
+                    // If the cooldown is not ready, the fleet holds this foothold rather than chain-capturing.
                     if (state.ticks - faction.lastExpansionTick >= AI_CONQUEST_COOLDOWN_TICKS) {
                         annexAISystem(state, faction, targetSys, fleet)
                     }
-                } else if (defenderFleets.isNotEmpty()) {
-                    // Battle clash
+                } else if (defenderFleets.isNotEmpty() && faction != null &&
+                    isAtWar(state, fleet.owner, defenderFleets.first().owner)
+                ) {
                     resolveFleetClash(state, fleet, defenderFleets.first())
                 }
             }
         }
     }
+
+    private fun canConquerSystem(state: GameState, attackerId: String, ownerId: String?): Boolean =
+        ownerId == null || (ownerId != attackerId && isAtWar(state, attackerId, ownerId))
 
     private fun annexAISystem(state: GameState, faction: Faction, system: StarSystem, fleet: Fleet) {
         val oldOwner = system.owner
@@ -191,6 +310,7 @@ object NebulaSimulationEngine {
         system.owner = faction.id
         if (system.id !in faction.systems) faction.systems.add(system.id)
         faction.lastExpansionTick = state.ticks
+        applyBorderTension(state, faction.id, system)
         state.events.add(
             0,
             GalacticEvent(
@@ -222,6 +342,13 @@ object NebulaSimulationEngine {
         }
 
         winner.strength = (winner.strength - 3f).coerceAtLeast(5f)
+
+        state.activeWars.firstOrNull {
+            (it.factionA == winner.owner && it.factionB == loser.owner) ||
+                (it.factionA == loser.owner && it.factionB == winner.owner)
+        }?.let { war ->
+            if (winner.owner == war.factionA) war.scoreA += 1 else war.scoreB += 1
+        }
 
         state.factions[winner.owner]?.stats?.let { it.wins += 1; it.battles += 1 }
         state.factions[loser.owner]?.stats?.let { it.losses += 1; it.battles += 1 }
@@ -416,10 +543,13 @@ object NebulaSimulationEngine {
         val currentSys = state.systems[fleet.location] ?: return false
 
         if (!currentSys.neighbors.contains(destinationId)) return false
+        val destSys = state.systems[destinationId] ?: return false
+        if (destSys.owner != null && destSys.owner != fleet.owner &&
+            !isAtWar(state, fleet.owner, destSys.owner!!)
+        ) return false
         fleet.location = destinationId
 
         // Check if landing on unowned or enemy system
-        val destSys = state.systems[destinationId]
         if (destSys != null && destSys.owner != fleet.owner) {
             val enemyFleets = state.fleets.filter { it.location == destinationId && it.owner != fleet.owner }
             if (enemyFleets.isEmpty()) {
@@ -427,6 +557,7 @@ object NebulaSimulationEngine {
                 if (oldOwner != null) state.factions[oldOwner]?.systems?.remove(destinationId)
                 destSys.owner = fleet.owner
                 state.factions[fleet.owner]?.systems?.add(destinationId)
+                applyBorderTension(state, fleet.owner, destSys)
                 state.events.add(
                     0,
                     GalacticEvent(
@@ -460,21 +591,41 @@ object NebulaSimulationEngine {
     }
 
     fun proposePeace(state: GameState, targetFactionId: String): String {
-        val rel = state.diplomacy[state.playerFactionId]?.get(targetFactionId) ?: return "No diplomatic channel."
-        rel.relation = (rel.relation + 30).coerceAtMost(100)
-        rel.trust = (rel.trust + 20).coerceAtMost(100)
-        rel.status = RelationStatus.fromRelation(rel.relation)
-
-        state.diplomacy[targetFactionId]?.get(state.playerFactionId)?.let {
-            it.relation = rel.relation
-            it.trust = rel.trust
-            it.status = rel.status
+        val playerFactionId = state.playerFactionId
+        if (playerFactionId == targetFactionId || targetFactionId !in state.factions) {
+            return "Target faction unavailable."
         }
 
-        if (rel.status == RelationStatus.ALLY) {
-            unlockAchievement(state, "diplomat")
+        val wasAtWar = isAtWar(state, playerFactionId, targetFactionId)
+        if (wasAtWar) {
+            state.activeWars.removeAll {
+                (it.factionA == playerFactionId && it.factionB == targetFactionId) ||
+                    (it.factionA == targetFactionId && it.factionB == playerFactionId)
+            }
+            adjustRelations(state, playerFactionId, targetFactionId, relationDelta = 25, trustDelta = 10)
+            val targetName = state.factions[targetFactionId]?.name ?: targetFactionId
+            state.events.add(
+                0,
+                GalacticEvent(
+                    id = "peace_${state.ticks}_${playerFactionId}_${targetFactionId}",
+                    tick = state.ticks,
+                    titleKey = "Armistice Signed",
+                    messageKey = "${state.factions[playerFactionId]?.name ?: playerFactionId} and $targetName agreed to a ceasefire.",
+                    factionId = playerFactionId,
+                    icon = "🕊️"
+                )
+            )
+        } else {
+            adjustRelations(state, playerFactionId, targetFactionId, relationDelta = 30, trustDelta = 20)
         }
-        return "Peace treaty signed with ${state.factions[targetFactionId]?.name}! Relations normalized."
+
+        val rel = state.diplomacy[playerFactionId]?.get(targetFactionId)
+        if (rel?.status == RelationStatus.ALLY) unlockAchievement(state, "diplomat")
+        return if (wasAtWar) {
+            "Armistice signed with ${state.factions[targetFactionId]?.name}. The war has ended."
+        } else {
+            "Peace treaty signed with ${state.factions[targetFactionId]?.name}! Relations normalized."
+        }
     }
 
     fun spyAction(state: GameState, targetFactionId: String): String {

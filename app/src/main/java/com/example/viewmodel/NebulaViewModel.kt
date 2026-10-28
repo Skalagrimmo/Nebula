@@ -241,6 +241,13 @@ class NebulaViewModel : ViewModel() {
         return res
     }
 
+    fun declareWar(targetFactionId: String): String {
+        val curr = _gameState.value
+        val res = NebulaSimulationEngine.declareWar(curr, targetFactionId)
+        publishState(curr)
+        return res
+    }
+
     fun spyAction(targetFactionId: String): String {
         val curr = _gameState.value
         val res = NebulaSimulationEngine.spyAction(curr, targetFactionId)

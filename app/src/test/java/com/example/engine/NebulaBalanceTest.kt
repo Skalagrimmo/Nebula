@@ -217,6 +217,79 @@ class NebulaBalanceTest {
     }
 
     @Test
+    fun `declaring war creates a hostile active war record for both factions`() {
+        val state = GalaxyGenerator.createInitialState()
+        val initialWars = state.factions.getValue("solarian").let {
+            state.diplomacy.getValue(it.id).getValue("zergon").wars
+        }
+
+        val message = NebulaSimulationEngine.declareWar(state, "zergon")
+
+        assertTrue(message.contains("War declared"))
+        assertEquals(1, state.activeWars.size)
+        assertTrue(NebulaSimulationEngine.isAtWar(state, "solarian", "zergon"))
+        val solarianRelation = state.diplomacy.getValue("solarian").getValue("zergon")
+        val zergonRelation = state.diplomacy.getValue("zergon").getValue("solarian")
+        assertEquals(-65, solarianRelation.relation)
+        assertEquals(solarianRelation.relation, zergonRelation.relation)
+        assertEquals(com.example.model.RelationStatus.HOSTILE, solarianRelation.status)
+        assertEquals(initialWars + 1, solarianRelation.wars)
+        assertEquals(1, zergonRelation.wars)
+    }
+
+    @Test
+    fun `peace proposal ends an active war but does not instantly create an ally`() {
+        val state = GalaxyGenerator.createInitialState()
+        NebulaSimulationEngine.declareWar(state, "zergon")
+
+        val message = NebulaSimulationEngine.proposePeace(state, "zergon")
+
+        assertTrue(message.contains("Armistice"))
+        assertTrue(state.activeWars.isEmpty())
+        assertTrue(!NebulaSimulationEngine.isAtWar(state, "solarian", "zergon"))
+        assertEquals(-40, state.diplomacy.getValue("solarian").getValue("zergon").relation)
+        assertEquals(-40, state.diplomacy.getValue("zergon").getValue("solarian").relation)
+        assertTrue(state.events.any { it.titleKey == "Armistice Signed" })
+    }
+
+    @Test
+    fun `player cannot annex a rival system until war is declared`() {
+        val state = GalaxyGenerator.createInitialState()
+        state.fleets.removeAll { it.owner == "federation" }
+
+        val peacefulMove = NebulaSimulationEngine.moveFleet(state, "fleet_sol_2", "Alpha")
+        assertTrue(!peacefulMove)
+        assertEquals("Sol", state.fleets.first { it.id == "fleet_sol_2" }.location)
+        assertEquals("federation", state.systems.getValue("Alpha").owner)
+
+        NebulaSimulationEngine.declareWar(state, "federation")
+        val wartimeMove = NebulaSimulationEngine.moveFleet(state, "fleet_sol_2", "Alpha")
+
+        assertTrue(wartimeMove)
+        assertEquals("solarian", state.systems.getValue("Alpha").owner)
+        assertTrue(state.factions.getValue("solarian").systems.contains("Alpha"))
+        assertTrue(!state.factions.getValue("federation").systems.contains("Alpha"))
+    }
+
+    @Test
+    fun `aggressive AI declares war when diplomatic relations become hostile`() {
+        val state = GalaxyGenerator.createInitialState()
+        val zergonRelation = state.diplomacy.getValue("zergon").getValue("federation")
+        zergonRelation.relation = -75
+        zergonRelation.status = com.example.model.RelationStatus.HOSTILE
+        val federationRelation = state.diplomacy.getValue("federation").getValue("zergon")
+        federationRelation.relation = -75
+        federationRelation.status = com.example.model.RelationStatus.HOSTILE
+        state.ticks = 20
+
+        NebulaSimulationEngine.processAIDiplomacy(state)
+
+        assertTrue(NebulaSimulationEngine.isAtWar(state, "zergon", "federation"))
+        assertEquals(1, state.activeWars.size)
+        assertTrue(state.events.any { it.titleKey == "War Declared" })
+    }
+
+    @Test
     fun `pirate fleets cannot annex systems during repeated movement`() {
         val state = GameState(
             factions = mutableMapOf(
