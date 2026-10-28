@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.model.ActiveWar
 import com.example.model.DiplomacyRelation
 import com.example.model.GalacticEvent
+import com.example.model.PirateEncounter
 import com.example.model.RelationStatus
 import org.json.JSONObject
 import org.junit.After
@@ -85,6 +86,17 @@ class SaveLoadManagerTest {
                 effectDesc = "Production reduced"
             )
         )
+        state.activeEncounter = PirateEncounter(
+            id = "encounter-9",
+            enemyName = "Corsair Raider",
+            enemyHp = 27,
+            enemyHpMax = 45,
+            enemyDamage = 8,
+            bounty = 120,
+            salvageItem = "ore",
+            salvageAmount = 2,
+            questId = "quest-test"
+        )
 
         assertTrue("saveGame should succeed", SaveLoadManager.saveGame(context, state))
         assertTrue("save file should be present", SaveLoadManager.hasSaveFile(context))
@@ -127,6 +139,17 @@ class SaveLoadManagerTest {
         assertEquals("solarian", event.factionId)
         assertEquals("☄️", event.icon)
         assertEquals("Production reduced", event.effectDesc)
+
+        val encounter = requireNotNull(restored.activeEncounter)
+        assertEquals("encounter-9", encounter.id)
+        assertEquals("Corsair Raider", encounter.enemyName)
+        assertEquals(27, encounter.enemyHp)
+        assertEquals(45, encounter.enemyHpMax)
+        assertEquals(8, encounter.enemyDamage)
+        assertEquals(120, encounter.bounty)
+        assertEquals("ore", encounter.salvageItem)
+        assertEquals(2, encounter.salvageAmount)
+        assertEquals("quest-test", encounter.questId)
     }
 
     @Test
