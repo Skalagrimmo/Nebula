@@ -141,6 +141,71 @@ class NebulaBalanceTest {
     }
 
     @Test
+    fun `economic victory requires the raised threshold and minimum campaign length`() {
+        val state = GalaxyGenerator.createInitialState()
+        val solarian = state.factions.getValue("solarian")
+        solarian.credits = 20_000
+        state.ticks = 2_399
+
+        NebulaSimulationEngine.checkVictory(state)
+        assertTrue("no victory should be possible before turn 2,400", !state.victoryAchieved)
+
+        state.ticks = 2_400
+        NebulaSimulationEngine.checkVictory(state)
+        assertTrue("the old 20,000-credit threshold should no longer end a campaign", !state.victoryAchieved)
+
+        solarian.credits = 150_000
+        NebulaSimulationEngine.checkVictory(state)
+        assertTrue(state.victoryAchieved)
+        assertEquals("solarian", state.winnerFactionId)
+        assertEquals("economic", state.victoryType)
+    }
+
+    @Test
+    fun `domination victory requires at least 80 percent and minimum campaign length`() {
+        val state = GalaxyGenerator.createInitialState()
+        val solarian = state.factions.getValue("solarian")
+        state.factions.values.forEach { faction ->
+            faction.systems.clear()
+            faction.credits = 0
+        }
+        solarian.systems.addAll(state.systems.keys.take(12))
+        state.fleets.clear()
+        state.ticks = 2_399
+
+        NebulaSimulationEngine.checkVictory(state)
+        assertTrue("even a dominant empire must not end a new campaign early", !state.victoryAchieved)
+
+        state.ticks = 2_400
+        NebulaSimulationEngine.checkVictory(state)
+        assertTrue(state.victoryAchieved)
+        assertEquals("solarian", state.winnerFactionId)
+        assertEquals("domination", state.victoryType)
+    }
+
+    @Test
+    fun `military victory requires minimum campaign length`() {
+        val state = GalaxyGenerator.createInitialState()
+        val solarian = state.factions.getValue("solarian")
+        state.factions.values.forEach { faction ->
+            faction.systems.clear()
+            faction.credits = 0
+        }
+        solarian.systems.add("Sol")
+        state.fleets.removeAll { it.owner != "solarian" }
+        state.ticks = 2_399
+
+        NebulaSimulationEngine.checkVictory(state)
+        assertTrue("military elimination must not end a new campaign early", !state.victoryAchieved)
+
+        state.ticks = 2_400
+        NebulaSimulationEngine.checkVictory(state)
+        assertTrue(state.victoryAchieved)
+        assertEquals("solarian", state.winnerFactionId)
+        assertEquals("military", state.victoryType)
+    }
+
+    @Test
     fun `pirate fleets cannot annex systems during repeated movement`() {
         val state = GameState(
             factions = mutableMapOf(
