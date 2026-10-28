@@ -10,6 +10,18 @@ import org.junit.Test
 
 class ExampleUnitTest {
     @Test
+    fun testUiRevisionMakesMutableStateUpdatesObservable() {
+        val state = GalaxyGenerator.createInitialState()
+        val previous = state
+        state.ticks += 1
+
+        val published = state.copy(uiRevision = 1L)
+
+        assertNotEquals("UI revision must distinguish published snapshots", previous, published)
+        assertEquals(1L, published.uiRevision)
+    }
+
+    @Test
     fun testGalaxyGeneration() {
         val state = GalaxyGenerator.createInitialState(playerFactionId = "solarian", mode = "strategy")
         assertTrue(state.systems.isNotEmpty())
