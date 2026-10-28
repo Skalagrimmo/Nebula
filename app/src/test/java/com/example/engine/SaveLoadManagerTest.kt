@@ -163,6 +163,7 @@ class SaveLoadManagerTest {
         root.remove("diplomacy")
         root.remove("activeWars")
         root.remove("events")
+        root.remove("activeEncounter")
 
         val systems = root.getJSONObject("systems")
         val systemKeys = systems.keys()
