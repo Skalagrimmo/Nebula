@@ -91,6 +91,56 @@ class NebulaBalanceTest {
     }
 
     @Test
+    fun `AI fleet waits for its faction expansion cooldown before annexing`() {
+        val state = GameState(
+            ticks = 120,
+            playerFactionId = "solarian",
+            factions = mutableMapOf(
+                "zergon" to Faction(
+                    id = "zergon",
+                    name = "Zergon Hive",
+                    displayName = "Zergon Hive",
+                    systems = mutableListOf("A"),
+                    lastExpansionTick = 1
+                )
+            ),
+            systems = mutableMapOf(
+                "A" to StarSystem(
+                    id = "A",
+                    owner = "zergon",
+                    neighbors = mutableListOf("B")
+                ),
+                "B" to StarSystem(
+                    id = "B",
+                    owner = null,
+                    neighbors = mutableListOf("A")
+                )
+            ),
+            fleets = mutableListOf(
+                Fleet(
+                    id = "zergon-raider",
+                    owner = "zergon",
+                    location = "B",
+                    strength = 20f,
+                    type = FleetType.ASSAULT,
+                    role = "attack"
+                )
+            )
+        )
+
+        NebulaSimulationEngine.processFleetMovement(state)
+        assertNull("AI should hold an occupied system until its cooldown expires", state.systems.getValue("B").owner)
+        assertEquals("B", state.fleets.single().location)
+
+        state.ticks = 121
+        NebulaSimulationEngine.processFleetMovement(state)
+
+        assertEquals("zergon", state.systems.getValue("B").owner)
+        assertTrue(state.factions.getValue("zergon").systems.contains("B"))
+        assertEquals(121, state.factions.getValue("zergon").lastExpansionTick)
+    }
+
+    @Test
     fun `pirate fleets cannot annex systems during repeated movement`() {
         val state = GameState(
             factions = mutableMapOf(
