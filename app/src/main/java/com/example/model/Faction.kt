@@ -25,5 +25,7 @@ data class Faction(
     val tech: MutableList<String> = mutableListOf(),
     val stats: FactionStats = FactionStats(),
     val personality: FactionPersonality = FactionPersonality(),
-    var strategy: String = "balanced"
+    var strategy: String = "balanced",
+    /** Simulation tick at which this faction last annexed an AI-controlled system. */
+    var lastExpansionTick: Int = 0
 )
