@@ -14,10 +14,11 @@ object SaveLoadManager {
     private const val SAVE_FILE_NAME = "savegame.json"
     private const val TAG = "SaveLoadManager"
 
-    fun saveGame(context: Context, state: GameState): Boolean {
-        val atomicFile = AtomicFile(File(context.filesDir, SAVE_FILE_NAME))
-        var outputStream: FileOutputStream? = null
-        return try {
+    /**
+     * Encodes the current game state into an immutable payload.
+     * Call on the state-owning thread, then write the returned payload on Dispatchers.IO.
+     */
+    fun serializeGame(state: GameState): String {
             val root = JSONObject()
             root.put("version", state.version)
             root.put("ticks", state.ticks)
@@ -220,9 +221,28 @@ object SaveLoadManager {
             }
             root.put("achievements", achArr)
 
+            return root.toString(2)
+    }
+
+    fun saveGame(context: Context, state: GameState): Boolean {
+        return try {
+            writeSerializedGame(context, serializeGame(state))
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to serialize game", e)
+            false
+        }
+    }
+
+    /**
+     * Persists a previously encoded snapshot without touching mutable game objects.
+     */
+    fun writeSerializedGame(context: Context, serialized: String): Boolean {
+        val atomicFile = AtomicFile(File(context.filesDir, SAVE_FILE_NAME))
+        var outputStream: FileOutputStream? = null
+        return try {
             val stream = atomicFile.startWrite()
             outputStream = stream
-            stream.write(root.toString(2).toByteArray(Charsets.UTF_8))
+            stream.write(serialized.toByteArray(Charsets.UTF_8))
             atomicFile.finishWrite(stream)
             outputStream = null
             true
